@@ -48,23 +48,36 @@ def ensure_dtsg(client: Client) -> str:
     return token
 
 
+def _feature_spec(feature: str) -> dict[str, Any]:
+    try:
+        return mapping.FEATURE_METHODS[feature]
+    except KeyError:
+        raise ValueError(f"unknown feature: {feature!r}") from None
+
+
 def call_feature(
     client: Any,
     feature: str,
     allow_write: bool = False,
     **kwargs: Any,
 ) -> Any:
-    """Call the mapped method for a feature, retrying once on the fallback."""
-    try:
-        spec = mapping.FEATURE_METHODS[feature]
-    except KeyError:
-        raise ValueError(f"unknown feature: {feature!r}") from None
+    """Call the mapped method for a feature, retrying once on the fallback.
 
+    A write feature is never retried: a response that failed to parse may
+    already have been accepted by Instagram, so ``allow_write=True`` dispatches
+    the mapped method exactly once and re-raises.
+    """
+    spec = _feature_spec(feature)
     method_name = spec["method"]
-    if not spec.get("read_only", False) and not allow_write:
+    is_write = not spec.get("read_only", False)
+
+    if is_write and not allow_write:
         raise WriteNotAllowedError(
             f"Feature {feature!r} maps to mutating method {method_name!r}; write not allowed"
         )
+
+    if is_write:
+        return getattr(client, method_name)(**kwargs)
 
     fallback_name = spec.get("fallback")
     try:
@@ -83,8 +96,9 @@ def call_feature(
 
 
 def call_write(client: Any, feature: str, **kwargs: Any) -> Any:
-    """Call a feature with allow_write=True."""
-    return call_feature(client, feature, allow_write=True, **kwargs)
+    """Call the mapped method exactly once; a write is never retried."""
+    spec = _feature_spec(feature)
+    return getattr(client, spec["method"])(**kwargs)
 
 
 def field_value(obj: Any, name: str) -> Any:

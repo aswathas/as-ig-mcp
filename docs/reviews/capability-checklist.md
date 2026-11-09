@@ -52,10 +52,10 @@ paused it)
 
 | # | Capability | Check | Status |
 |---|---|---|---|
-| W1 | Confirm gate blocks | `ig_write kind=send_message` with no code returns `needs_confirm` and sends nothing | todo |
-| W2 | One approved write lands once | with the code, exactly one message appears in the owner's own thread | todo |
+| W1 | Approval gate blocks | `ig_write kind=send_message` and the human clicks No → the tool returns `denied` and sends nothing | todo |
+| W2 | One approved write lands once | the human clicks Yes → exactly one message appears in the owner's own thread | todo |
 | W3 | Idempotency | replaying the same idempotency key reports "already done" and sends nothing | todo |
-| W4 | Audit journal | `audit.jsonl` holds the rejected attempt, the approved attempt and the target | todo |
+| W4 | Audit journal | `audit.jsonl` holds the denied attempt, the approved attempt and the target | todo |
 | W5 | Publish photo, video, reel, carousel, story | `ig_write kind=publish` for each target | todo |
 | W6 | Instagram's own scheduler | `ig_write kind=schedule schedule_at=…` is accepted by Instagram | todo |
 | W7 | Local queue and recurrence | `ig_queue` lists, schedules, cancels; recurrence computes | todo |

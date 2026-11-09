@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from instagrapi.exceptions import ClientError, ClientGraphqlError, ClientJSONDecodeError
 
-from as_ig_mcp import client
+from as_ig_mcp import client, mapping
 
 
 def test_call_feature_dispatches_to_the_mapped_method():
@@ -96,6 +96,66 @@ def test_calling_mutating_feature_without_allow_write_raises_and_never_calls():
     assert "follow" in str(exc_info.value)
     assert "user_follow" in str(exc_info.value)
     assert len(calls) == 0
+
+
+def test_call_write_does_not_use_the_fallback_when_the_primary_raises(monkeypatch):
+    calls = []
+
+    def primary(**kwargs):
+        calls.append(("primary", kwargs))
+        raise ClientError("primary failed")
+
+    def fallback(**kwargs):
+        calls.append(("fallback", kwargs))
+        return "from-fallback"
+
+    fake = SimpleNamespace(primary=primary, fallback_method=fallback)
+    monkeypatch.setitem(
+        mapping.FEATURE_METHODS,
+        "write_with_fallback",
+        {
+            "method": "primary",
+            "transport": "rest",
+            "summary": "A write with a fallback",
+            "fallback": "fallback_method",
+            "read_only": False,
+        },
+    )
+
+    with pytest.raises(ClientError):
+        client.call_write(fake, "write_with_fallback", user_id="1")
+
+    assert calls == [("primary", {"user_id": "1"})]
+
+
+def test_call_feature_with_allow_write_on_a_write_does_not_use_the_fallback(monkeypatch):
+    calls = []
+
+    def primary(**kwargs):
+        calls.append("primary")
+        raise ClientError("primary failed")
+
+    def fallback(**kwargs):
+        calls.append("fallback")
+        return "from-fallback"
+
+    fake = SimpleNamespace(primary=primary, fallback_method=fallback)
+    monkeypatch.setitem(
+        mapping.FEATURE_METHODS,
+        "write_with_fallback",
+        {
+            "method": "primary",
+            "transport": "rest",
+            "summary": "A write with a fallback",
+            "fallback": "fallback_method",
+            "read_only": False,
+        },
+    )
+
+    with pytest.raises(ClientError):
+        client.call_feature(fake, "write_with_fallback", allow_write=True)
+
+    assert calls == ["primary"]
 
 
 def test_call_write_on_mutating_feature_does_call_it():

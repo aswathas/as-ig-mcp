@@ -9,6 +9,8 @@ try:  # mcp 1.x
 except ModuleNotFoundError:  # mcp 2.x renamed FastMCP to MCPServer
     from mcp.server.mcpserver import MCPServer as _Server
 
+from mcp.types import ToolAnnotations
+
 from . import (
     tools_account,
     tools_discovery,
@@ -20,6 +22,7 @@ from . import (
     tools_status,
     tools_story,
     tools_threads,
+    tools_write,
 )
 
 mcp = _Server("as-ig")
@@ -170,6 +173,29 @@ def ig_story(
 )
 def ig_account() -> dict[str, Any]:
     return _safe(tools_account.ig_account)
+
+
+@mcp.tool(
+    description=tools_write.IG_WRITE_DESCRIPTION,
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    meta={"anthropic/requiresUserInteraction": True},
+)
+def ig_write(
+    kind: str,
+    idempotency_key: str | None = None,
+    **args: Any,
+) -> dict[str, Any]:
+    return _safe(
+        tools_write.ig_write,
+        kind=kind,
+        idempotency_key=idempotency_key,
+        **args,
+    )
 
 
 def main() -> None:

@@ -34,7 +34,8 @@ MUTATING_METHODS: frozenset[str] = frozenset(
     hashtag_follow hashtag_unfollow
     direct_send direct_send_photo direct_send_video direct_send_voice direct_send_file
     direct_send_reaction direct_delete_reaction direct_message_delete direct_message_unsend
-    direct_message_seen direct_send_seen direct_indicate_activity
+    direct_message_seen direct_send_seen direct_indicate_activity direct_media_share
+    direct_profile_share direct_story_share
     direct_thread_create direct_thread_add_users direct_thread_remove_users
     direct_thread_update_title direct_thread_hide direct_thread_mute direct_thread_unmute
     direct_thread_mark_unread direct_thread_mark_read direct_thread_mute_video_call
@@ -44,7 +45,7 @@ MUTATING_METHODS: frozenset[str] = frozenset(
     photo_upload_to_story photo_upload_to_story_with_music video_upload_to_story
     photo_upload_to_cutout_sticker video_upload_to_cutout_sticker
     photo_configure_to_story photo_configure_to_cutout_sticker
-    media_comment comment_like comment_unlike comment_pin comment_unpin
+    media_comment media_edit comment_like comment_unlike comment_pin comment_unpin
     comment_bulk_delete media_note_create media_note_delete create_note delete_note
     highlight_create highlight_edit highlight_change_title highlight_change_cover
     highlight_add_stories highlight_remove_stories highlight_delete
@@ -52,6 +53,7 @@ MUTATING_METHODS: frozenset[str] = frozenset(
     account_change_picture account_set_ai_info account_convert_to_professional
     account_convert_to_business account_convert_to_creator
     set_external_url remove_bio_links media_save media_unsave
+    user_follow_request_approve user_follow_request_decline
     notification_settings notification_likes notification_comments notification_new_follower
     notification_user_tagged notification_disable notification_mute_all
     media_share_to_threads_config media_share_to_fb_unified_config
@@ -82,6 +84,15 @@ FEATURE_METHODS: dict[str, dict] = {
     "unfollow": _entry("user_unfollow", "rest", "Unfollow an account.", read_only=False),
     "block": _entry("user_block", "rest", "Block an account.", read_only=False),
     "mute": _entry("mute_posts_from_follow", "rest", "Mute posts from an account.", read_only=False),
+    "unblock": _entry("user_unblock", "rest", "Unblock an account.", read_only=False),
+    "report": _entry("user_report", "rest", "Report an account.", read_only=False),
+    "remove_follower": _entry("user_remove_follower", "rest", "Remove an account from followers.", read_only=False),
+    "follow_request_approve": _entry(
+        "user_follow_request_approve", "rest", "Approve a follow request.", read_only=False
+    ),
+    "follow_request_decline": _entry(
+        "user_follow_request_decline", "rest", "Decline a follow request.", read_only=False
+    ),
     "close_friend": _entry("close_friend_add", "rest", "Add an account to close friends.", read_only=False),
     # Insights
     "best_posts": _entry(
@@ -117,6 +128,15 @@ FEATURE_METHODS: dict[str, dict] = {
     "send_file": _entry("direct_send_file", "rest", "Send a file attachment in a DM.", read_only=False),
     "react": _entry("direct_send_reaction", "rest", "React to a DM.", read_only=False),
     "unsend": _entry("direct_message_unsend", "rest", "Unsend a DM.", read_only=False),
+    "mark_seen": _entry("direct_message_seen", "rest", "Mark a DM as seen.", read_only=False),
+    "share": _entry("direct_media_share", "rest", "Share a post into a DM.", read_only=False),
+    "thread_hide": _entry("direct_thread_hide", "rest", "Hide a DM thread.", read_only=False),
+    "thread_title": _entry(
+        "direct_thread_update_title", "rest", "Set a DM thread title.", read_only=False
+    ),
+    "thread_group_members": _entry(
+        "direct_thread_add_users", "rest", "Change the members of a group DM thread.", read_only=False
+    ),
     # Publishing
     "publish_photo": _entry("photo_upload", "rest", "Publish a photo post.", read_only=False),
     "publish_video": _entry("video_upload", "rest", "Publish a video post.", read_only=False),
@@ -128,6 +148,7 @@ FEATURE_METHODS: dict[str, dict] = {
     "crosspost": _entry(
         "media_share_to_threads_config", "graphql", "Crosspost settings to Facebook and Threads.", read_only=False
     ),
+    "collaborate": _entry("clip_upload", "rest", "Invite collaborators on a reel.", read_only=False),
     # Posts and comments
     "posts": _entry(
         "user_medias_v1", "rest", "A user's posts, paginated.", fallback="user_medias_gql"
@@ -151,6 +172,7 @@ FEATURE_METHODS: dict[str, dict] = {
     "comment_reply": _entry("media_comment", "rest", "Post a comment or reply.", read_only=False),
     "comment_bulk_delete": _entry("comment_bulk_delete", "rest", "Delete several comments at once.", read_only=False),
     "comment_pin": _entry("comment_pin", "rest", "Pin or unpin a comment.", read_only=False),
+    "toggle_comments": _entry("media_edit", "rest", "Turn comments on or off for a post.", read_only=False),
     # Discovery
     "notifications": _entry(
         "news_inbox_v1", "rest", "Activity feed (old and new stories).", read_only=True
@@ -200,7 +222,12 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "follow",
         "unfollow",
         "block",
+        "unblock",
         "mute",
+        "report",
+        "remove_follower",
+        "follow_request_approve",
+        "follow_request_decline",
         "close_friend",
     ],
     "dm": [
@@ -219,6 +246,11 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "send_file",
         "react",
         "unsend",
+        "mark_seen",
+        "share",
+        "thread_hide",
+        "thread_title",
+        "thread_group_members",
     ],
     "publish": [
         "publish_photo",
@@ -227,12 +259,14 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "publish_album",
         "publish_story",
         "crosspost",
+        "collaborate",
     ],
     "comments": [
         "comments",
         "comment_reply",
         "comment_bulk_delete",
         "comment_pin",
+        "toggle_comments",
     ],
     "stories": [
         "stories",

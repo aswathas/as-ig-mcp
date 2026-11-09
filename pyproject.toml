@@ -12,8 +12,8 @@ license = "MIT"
 authors = [{ name = "Aswath" }]
 dependencies = [
     "instagrapi==3.2.8",
-    "mcp",
-    "pycryptodomex",
+    # mcp 2.x removed FastMCP; our server uses the low-level Server API.
+    "mcp>=2.3,<3",
 ]
 
 [tool.setuptools]

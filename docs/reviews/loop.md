@@ -49,7 +49,8 @@ does nothing. Always call the npm `cmd.cmd` by full path.
 
 ## Safety rules
 
-- No Instagram write without the 6-digit confirm code — in any worker, ever.
+- No Instagram write without the account owner's approval click in the dialog on
+  their own screen — in any worker, ever. There is no approval code to relay or fetch.
 - The session file stays DPAPI-encrypted; never commit it, never paste it into
   a worker prompt, never print it.
 - Workers never receive the account password. Relogin is done by the user

@@ -42,7 +42,7 @@ Measured, same account, same session:
 The job to be done: read and write Instagram — DMs, feed, followers, stories,
 search, publish, comments, insights — from Claude Code, on this machine, for
 this one business account, with nothing published or sent without a human
-confirm code. And, per the market study, cover every capability the whole
+owner's approval on their screen. And, per the market study, cover every capability the whole
 market covers, plus the ones nobody covers.
 
 ## 2. Scope — in / out
@@ -79,8 +79,10 @@ market covers, plus the ones nobody covers.
   of **public** business profiles, read through the same API — reading another
   account's private data, or scraping a profile the API does not expose, is out
   of scope.
-- Safety: a 6-digit confirm code with a preview on every write, an idempotency
-  key, and the audit journal.
+- Safety: every write asks the account owner first — a yes/no dialog on their own
+  screen showing the exact action — plus an idempotency key and the audit
+  journal. No approval code exists anywhere, so there is nothing for the agent
+  to relay or fetch.
 - Distribution: PyPI package, official MCP registry entry, Claude plugin
   marketplace entry, `claude plugin validate --strict` clean, LICENSE, README,
   tests, a health tool.
@@ -543,17 +545,23 @@ when a review runs — is `docs/reviews/loop.md`. Two rules matter most here:
 the orchestrator runs the phase check itself and never accepts a worker's claim
 as evidence, and workers never commit.
 
-| Phase | Build | Check |
-|---|---|---|
-| 0 | Vendor bug report (wrong URL, repro, fix) | exists in the repo; if aichargelabs ships 3.2.8 the project can shrink to a config change |
-| 1 | Package skeleton, dedicated venv, `session.py` (DPAPI), `client.py`, `mapping.py`, `state.py` | offline tests pass |
-| 2 | Read tools (`ig_status`, `ig_person`, `ig_people`, `ig_feed`, `ig_search`, `ig_story`, `ig_thread`, `ig_inbox`) + `ig_health` | the 13 dead reads return data; health green |
-| 3 | Register in Claude Code | `claude mcp add as-ig --scope user -- .venv\Scripts\python.exe -m as_ig_mcp serve`, then `claude mcp list` shows it connected; a clean session calls a tool |
-| 4 | `ig_write` + confirm gate + idempotency + `audit.py` | write-gate, audit and idempotency tests pass |
-| 5 | `ig_session` relogin, `ig_account`, `ig_insight` | relogin works; insights match Instagram's numbers |
-| 6 | `ig_queue`, `ig_preset`, native `schedule_at` | queue test passes; native schedule accepted |
-| 7 | `realtime.py`, `events.py`, `ig_digest wait_s` | realtime test passes; polling fallback intact |
-| 8 | README, `tool-map.md`, LICENSE, plugin manifest, `server.json`, `claude plugin validate --strict`, PyPI publish, registry publish, marketplace entry | a stranger can install and run it in one command |
+| Phase | Files it may touch | Check (command) | Status |
+|---|---|---|---|
+| 01 | `pyproject.toml`, `src/as_ig_mcp/{__init__,state,session,client,mapping}.py`, `tests/` | `.venv/Scripts/python.exe -m pytest -q` → 13 passed | done |
+| 02 | `src/as_ig_mcp/{cache,cli,__main__,server,tools_status,tools_health,tools_session}.py`, `tests/` | `pytest -q` → 22 passed; `python -m as_ig_mcp health` → 8/10 live | done |
+| 02b | `src/as_ig_mcp/{mapping,client,cache,tools_health,tools_status}.py`, `tests/` | `pytest -q` → 33 passed; a mutating feature raises and the method is never called | done |
+| 03a | `src/as_ig_mcp/{serialize,tools_people,tools_discovery,tools_feed,server}.py`, `tests/` | `pytest -q` → 59 passed; live: profile, followers, following, search, posts, reels, saved, notifications | done |
+| 03b | `src/as_ig_mcp/{tools_threads,tools_inbox,tools_story,tools_account,server}.py`, `tests/` | `pytest -q` → 73 passed; live: a thread, the inbox, the account block and insights | done |
+| 04 | `src/as_ig_mcp/{writes,audit,client,server}.py`, `tests/test_writes.py`, `tests/test_tool_write.py` | `pytest -q` → all pass; a denied write makes no Instagram call; the journal has one line per attempt | running |
+| 05a | `src/as_ig_mcp/{state,cache,digest,session,cli,server,tools_insight}.py`, `tests/` | `pytest -q` → all pass; two connections to the same database see each other's rows | next |
+| 05b | `src/as_ig_mcp/{queue,presets,tools_queue,tools_preset}.py`, `tests/` | `pytest -q` → all pass; a queued item fires once and never twice | planned |
+| 06 | `src/as_ig_mcp/{realtime,events,tools_digest}.py`, `tests/` | `pytest -q` → all pass; `ig_digest wait_s=10` returns an event while the socket is alive | planned |
+| 07 | `README.md`, `LICENSE`, `pyproject.toml`, `.claude-plugin/plugin.json`, `server.json`, `docs/` | `claude plugin validate --strict` → validation passed; the package builds and installs | planned |
+| 08 | public repo, PyPI publish, registry publish, marketplace entry | a stranger installs and runs it in one command | planned |
+
+Two checks above need a human and are marked as such when they run: the first
+live write (the owner clicks Approve on their own screen) and the final
+install test on a clean machine.
 
 ## 10. Risks, assumptions, and what would invalidate this spec
 
@@ -615,32 +623,40 @@ as evidence, and workers never commit.
 
 **Risks**
 
-- M1. Instagram blocks the account for scripted use. Mitigation: 90-second
+- M1. **standing risk** Instagram blocks the account for scripted use. Mitigation: 90-second
   cache, throttled reads, confirm gate on every write, `ig_health`, and the
   option to stop using the tool.
-- M2. Realtime is the most fragile surface in the server. Mitigation: flag
+
+- M2. **planned — phase 06** Realtime is the most fragile surface in the server. Mitigation: flag
   plus polling fallback, ping watchdog, reconnect with backoff, socket probe in
   `ig_health`.
-- M3. Two servers with similar tool names can confuse the agent. Mitigation:
+
+- M3. **done — phases 02, 03** Two servers with similar tool names can confuse the agent. Mitigation:
   every tool description starts with `[AS-IG-MCP]`; the ownership map is in the
   README.
-- M4. `ig_write` with many `kind` values could drift toward a mega-tool, which
+
+- M4. **done — 16 tools, kinds by parameter** `ig_write` with many `kind` values could drift toward a mega-tool, which
   hurts tool-search matching. Mitigation: split into `ig_write` and
   `ig_manage` if its description passes 4,096 characters.
-- M5. The audit journal and presets hold user content on disk. Mitigation:
+
+- M5. **planned — phases 04, 05b** The audit journal and presets hold user content on disk. Mitigation:
   under `%APPDATA%`, never in git, documented in the README's data-handling
   section, with a clear-and-delete command.
-- M6. Publishing to the registry without trust signals. Mitigation: the
+
+- M6. **planned — phases 07, 08** Publishing to the registry without trust signals. Mitigation: the
   Anthropic pre-submission checklist — LICENSE, README over 40 words, pinned
   exact-version launcher, secrets via `userConfig` with `sensitive: true`,
   `claude plugin validate --strict` clean, tests, health tool.
-- M7. Smithery's MCP Proxy and managed identity shut down 2026-10-31 and its
+
+- M7. **done — recorded as a decision** Smithery's MCP Proxy and managed identity shut down 2026-10-31 and its
   CLI and SDKs are deprecated. Do not depend on it; it survives only as a
   directory.
-- M8. The private API is the ToS-violating path the commercial vendors warn
+
+- M8. **standing risk** The private API is the ToS-violating path the commercial vendors warn
   about. That liability is ours, and it is the main reason for the confirm
   gate, the cache, the throttling and the health tool.
-- M9. **Found by the EGM Stage 5 review and fixed.** instagrapi mixes readers
+
+- M9. **done — phase 02b** **Found by the EGM Stage 5 review and fixed.** instagrapi mixes readers
   and mutators under similar names. `notification_likes`, `notification_comments`,
   `notification_new_follower` and `notification_user_tagged` are settings
   mutators that default to `"off"`. The first version of the mapping table
@@ -650,49 +666,58 @@ as evidence, and workers never commit.
   mapping entry plus the `allow_write` guard in `client.call_feature`, so a read
   path cannot mutate anything. This is the failure mode most likely to bite an
   agent that trusts method names.
-- M10. **Found by the EGM Stage 5 review, then sharpened by Stage 8.** A confirm
+
+- M10. **spec done — code in phase 04** **Found by the EGM Stage 5 review, then sharpened by Stage 8.** A confirm
   code returned in the tool result proves a two-step flow, not human consent,
   because the same agent receives the code — and the owner typing the code into
   chat puts it in the agent's context anyway. There is no code now: the
   account owner approves by clicking Yes in a dialog that shows the exact
   action, and the write happens only if they do. The agent never holds an
   approval.
-- M15. **Found by the EGM Stage 8 review.** Loose JSON state meant the last
+
+- M11. **planned — phase 05b** **Found by the EGM Stage 5 review.** A local publish queue with no runner
+  only fires while someone has Claude Code open. Fixed by a Windows Scheduled
+  Task that ticks the queue every five minutes, with Instagram's native
+  scheduler as the server-independent path.
+
+- M12. **planned — phases 04, 05a** **Found by the EGM Stage 5 review.** The cache was never invalidated by a
+  write and the digest read through the cache, so the success criteria could
+  pass with no live Instagram call at all. Fixed: writes invalidate the affected
+  cache entries, and the digest always compares against live state.
+
+- M13. **done — phase 02b** **Found by the EGM Stage 5 review.** `ig_status` promised a quota that
+  instagrapi has no endpoint for, which would have meant printing an invented
+  number. Fixed: it reports "unknown" instead.
+
+- M14. **planned — phase 05a** **Found by the EGM Stage 5 review.** Moving the repo out of the
+  multi-product test repo dropped the one-login rule, which would have left two
+  live Instagram sessions on one account — the exact exposure risk M1 names.
+  Fixed by injecting our sessionid into the vendor daemon, so both servers share
+  one login.
+
+- M15. **planned — phase 05a** **Found by the EGM Stage 8 review.** Loose JSON state meant the last
   writer clobbered the whole cache, which silently disabled the 90-second
   cache — the main defence against an account block. State moved to one
   SQLite file (standard library), so the MCP server, the queue runner and a
   second session can write at once.
-- M16. **Found by the EGM Stage 8 review.** The modal approval dialog blocked
+
+- M16. **planned — phase 04** **Found by the EGM Stage 8 review.** The modal approval dialog blocked
   the calling thread, and the documented fallback let the agent fetch the code
   itself. Fixed: the dialog runs on its own thread with a five-minute timeout,
   and the CLI fallback is gone — on a machine with no desktop, writes are
   refused rather than approved by the agent.
-- M17. **Accepted, not fixed.** The v1 scope is market parity — every
+
+- M17. **accepted by the owner** **Accepted, not fixed.** The v1 scope is market parity — every
   capability the whole market covers, plus the white space — and it includes
   public distribution. The reviews flagged this repeatedly as more than one
   user and one account need. The owner chose the superset on purpose, so this
   stands as a decision, with the cost named: a larger surface, a longer
   build, and a private-API client that needs maintenance.
-- M18. **Accepted.** Realtime ships on by default (`AS_IG_REALTIME=0` turns it
+
+- M18. **spec done — code in phase 06** **Accepted.** Realtime ships on by default (`AS_IG_REALTIME=0` turns it
   off) so the acceptance criteria can actually be met by the documented install
   command, and the polling digest stays as the fallback when the socket is
   down.
-- M11. **Found by the EGM Stage 5 review.** A local publish queue with no runner
-  only fires while someone has Claude Code open. Fixed by a Windows Scheduled
-  Task that ticks the queue every five minutes, with Instagram's native
-  scheduler as the server-independent path.
-- M12. **Found by the EGM Stage 5 review.** The cache was never invalidated by a
-  write and the digest read through the cache, so the success criteria could
-  pass with no live Instagram call at all. Fixed: writes invalidate the affected
-  cache entries, and the digest always compares against live state.
-- M13. **Found by the EGM Stage 5 review.** `ig_status` promised a quota that
-  instagrapi has no endpoint for, which would have meant printing an invented
-  number. Fixed: it reports "unknown" instead.
-- M14. **Found by the EGM Stage 5 review.** Moving the repo out of the
-  multi-product test repo dropped the one-login rule, which would have left two
-  live Instagram sessions on one account — the exact exposure risk M1 names.
-  Fixed by injecting our sessionid into the vendor daemon, so both servers share
-  one login.
 
 **What would invalidate this spec**
 
