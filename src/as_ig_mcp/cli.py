@@ -19,6 +19,8 @@ commands:
   session status                   show the session and cache state
   status                           show the ig_status report
   health                           probe every capability class
+  digest                           show what changed since the last call
+  realtime                         show the realtime socket status
   queue list                       show the queued posts
   queue tick                       publish every item that is due
   queue install-task               register the five-minute Windows task
@@ -84,6 +86,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if command == "health":
         _emit(tools_health.ig_health())
+        return 0
+
+    if command == "digest":
+        from . import tools_digest
+
+        _emit(tools_digest.ig_digest())
+        return 0
+
+    if command == "realtime_worker":
+        from .realtime_worker import main as worker_main
+
+        return worker_main()
+
+    if command == "realtime":
+        from . import realtime
+
+        _emit(realtime.worker_status())
         return 0
 
     if command == "queue":

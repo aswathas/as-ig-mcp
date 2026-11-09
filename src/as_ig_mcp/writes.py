@@ -13,7 +13,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from . import audit, client, mapping
+from . import audit, cache, client, mapping
 from .serialize import plain
 
 TITLE = "AS-IG-MCP - approve write"
@@ -375,6 +375,9 @@ def perform_write(
         message = f"{type(exc).__name__}: {exc}"
         _journal(feature, values, preview, "failed", idempotency_key, message)
         return {"ok": False, "error": message, "preview": preview}
+
+    # Writes clear the cache so no stale cached read is left behind
+    cache.Cache().invalidate()
 
     _journal(feature, values, preview, "approved", idempotency_key, audit.COMPLETED)
     return {"ok": True, "preview": preview, "result": plain(result)}

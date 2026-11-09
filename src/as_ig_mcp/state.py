@@ -69,6 +69,15 @@ def events_path() -> Path:
     return app_dir() / "events.jsonl"
 
 
+def realtime_status_path() -> Path:
+    """Where the realtime worker process writes its state.
+
+    The worker runs beside the server, not inside it, so the server reads this
+    file to report the socket's state without touching the socket itself.
+    """
+    return app_dir() / "realtime_status.json"
+
+
 def audit_path() -> Path:
     return app_dir() / "audit.jsonl"
 

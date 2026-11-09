@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from typing import Any, Callable
 
 try:  # mcp 1.x
@@ -12,7 +14,9 @@ except ModuleNotFoundError:  # mcp 2.x renamed FastMCP to MCPServer
 from mcp.types import ToolAnnotations
 
 from . import (
+    realtime,
     tools_account,
+    tools_digest,
     tools_discovery,
     tools_feed,
     tools_health,
@@ -273,8 +277,69 @@ def ig_preset(
     )
 
 
+@mcp.tool(
+    description="[AS-IG-MCP] Delta digest: what changed since last call (messages, followers, posts, stories, events)."
+)
+def ig_digest(
+    since: str = "last",
+    timeout_s: float = 0.0,
+    kinds: list[str] | None = None,
+) -> dict[str, Any]:
+    return _safe(tools_digest.ig_digest, since=since, timeout_s=timeout_s, kinds=kinds)
+
+
+def _start_realtime_worker() -> Any:
+    """Run the realtime socket in its own process.
+
+    The socket is Instagram's private transport and has been observed to drop
+    and even to segfault the interpreter. Kept beside the server, a broken
+    socket cannot take the server down; the supervisor restarts it and
+    Instagram's own sequence id means no message is lost across a restart.
+    """
+    import subprocess
+    import sys
+    import threading
+
+    def _spawn() -> Any:
+        return subprocess.Popen(
+            [sys.executable, "-m", "as_ig_mcp", "realtime_worker"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    try:
+        proc = _spawn()
+    except Exception:
+        return None
+
+    def _supervise(proc: Any) -> None:
+        while True:
+            try:
+                proc.wait()
+            except Exception:
+                return
+            time.sleep(5.0)
+            try:
+                proc = _spawn()
+            except Exception:
+                return
+
+    threading.Thread(target=_supervise, args=(proc,), daemon=True).start()
+    return proc
+
+
 def main() -> None:
-    mcp.run()
+    worker = None
+    if os.environ.get("AS_IG_REALTIME", "1") != "0":
+        worker = _start_realtime_worker()
+    try:
+        mcp.run()
+    finally:
+        if worker is not None:
+            try:
+                worker.terminate()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

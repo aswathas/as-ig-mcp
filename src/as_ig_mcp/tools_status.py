@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import __version__, client, session, tools_health
+from . import __version__, client, realtime, session, tools_health
 from .cache import Cache, make_key
 from .session import settings_identity
 
@@ -60,7 +60,7 @@ def _status() -> dict[str, Any]:
         "account": None,
         "quota": "unknown - instagrapi exposes no quota endpoint",
         "cache": cache.stats(),
-        "realtime": {"enabled": False, "state": "not implemented in v1 phase 2"},
+        "realtime": realtime.status(),
         "health": tools_health.last_summary(),
         "version": __version__,
     }

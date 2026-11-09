@@ -32,6 +32,7 @@ EXPECTED_TOOLS = {
     "ig_insight",
     "ig_queue",
     "ig_preset",
+    "ig_digest",
 }
 
 

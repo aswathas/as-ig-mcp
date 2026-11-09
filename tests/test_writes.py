@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from instagrapi.exceptions import ClientError
 
-from as_ig_mcp import audit, client, state, writes
+from as_ig_mcp import audit, cache, client, state, writes
 
 
 class FakeClient:
@@ -176,3 +176,19 @@ def test_the_journal_never_contains_a_cookie_or_a_csrf_token(appdata, monkeypatc
     journal = state.audit_path().read_text(encoding="utf-8").lower()
     assert "sessionid" not in journal
     assert "csrftoken" not in journal
+
+
+def test_successful_write_clears_the_cache(appdata, monkeypatch):
+    fake = FakeClient()
+    _use(monkeypatch, fake)
+    c = cache.Cache()
+    c.set("test_key", {"foo": "bar"})
+    assert c.get("test_key") == {"foo": "bar"}
+
+    result = writes.perform_write(
+        "send_message",
+        {"username": "pravss.23", "text": "hello"},
+        dialog=lambda preview: True,
+    )
+    assert result["ok"] is True
+    assert c.get("test_key") is None
