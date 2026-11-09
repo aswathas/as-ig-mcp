@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from . import writes
+from . import tools_queue, writes
 
 #: kind -> the mapping feature it selects.
 WRITE_KINDS: dict[str, str] = {
@@ -18,7 +18,6 @@ WRITE_KINDS: dict[str, str] = {
     "mark_seen": "mark_seen",
     "share": "share",
     "publish": "publish_photo",
-    "schedule": "publish_photo",
     "first_comment": "comment_reply",
     "comment": "comment_reply",
     "bulk_delete_comments": "comment_bulk_delete",
@@ -47,6 +46,13 @@ WRITE_KINDS: dict[str, str] = {
     "download": "media_download",
 }
 
+#: Scheduling kinds are handled by the queue: `schedule` queues locally, and
+#: `native_schedule` hands the upload to Instagram's own scheduler.
+QUEUE_WRITE_KINDS: dict[str, str] = {
+    "schedule": "schedule",
+    "native_schedule": "native",
+}
+
 #: Kinds that remove or destroy something; the tool declares destructiveHint.
 DESTRUCTIVE_KINDS = frozenset(
     {"unfollow", "block", "unsend", "bulk_delete_comments", "remove_follower", "delete"}
@@ -57,7 +63,8 @@ send_message(user_ids/thread_ids, text) · send_media(user_ids/thread_ids, path)
 send_voice(user_ids/thread_ids, path) · send_file(user_ids/thread_ids, path) ·
 react(thread_id, message_id, emoji) · unsend(thread_id, message_id) ·
 mark_seen(thread_id, message_id) · share(user_ids/thread_ids, media_id) ·
-publish(path, caption) · schedule(path, caption, schedule_at) ·
+publish(path, caption) · schedule(path, caption, when, recurrence[, media_kind]) ·
+native_schedule(path, caption, schedule_at[, media_kind]) ·
 first_comment(media_id, text) · comment(media_id, text[, replied_to_comment_id]) ·
 bulk_delete_comments(media_id, comment_pks) · toggle_comments(media_id, enabled) ·
 follow(user_id) · unfollow(user_id) · block(user_id) · unblock(user_id) ·
@@ -80,11 +87,15 @@ IG_WRITE_DESCRIPTION = (
 )
 
 
+def _all_kinds() -> list[str]:
+    return list(WRITE_KINDS) + list(QUEUE_WRITE_KINDS)
+
+
 def _valid_kinds_error(kind: str) -> dict[str, Any]:
     return {
         "ok": False,
-        "error": f"unknown kind: {kind!r}; valid kinds: {', '.join(WRITE_KINDS)}",
-        "kinds": list(WRITE_KINDS),
+        "error": f"unknown kind: {kind!r}; valid kinds: {', '.join(_all_kinds())}",
+        "kinds": _all_kinds(),
     }
 
 
@@ -105,6 +116,45 @@ def _action_args(args: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
+def _first_value(values: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        value = values.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _queue_write(
+    name: str,
+    values: dict[str, Any],
+    idempotency_key: str | None,
+) -> dict[str, Any]:
+    action = QUEUE_WRITE_KINDS[name]
+    media_kind = _first_value(
+        values, ("media_kind", "media_type", "publish_kind", "upload_kind")
+    ) or "photo"
+    media_path = _first_value(values, ("media_path", "path", "file", "file_path"))
+    caption = _first_value(values, ("caption", "text"))
+    key = idempotency_key or _first_value(values, ("idempotency_key",))
+    common = {
+        "action": action,
+        "kind": media_kind,
+        "media_path": media_path,
+        "caption": caption,
+        "idempotency_key": key,
+    }
+    if action == "schedule":
+        return tools_queue.ig_queue(
+            **common,
+            when=_first_value(values, ("when", "schedule_at")),
+            recurrence=_first_value(values, ("recurrence",)) or "none",
+        )
+    return tools_queue.ig_queue(
+        **common,
+        schedule_at=_first_value(values, ("schedule_at", "when")),
+    )
+
+
 def ig_write(
     kind: str,
     idempotency_key: str | None = None,
@@ -114,6 +164,11 @@ def ig_write(
     if not isinstance(kind, str):
         return _valid_kinds_error(str(kind))
     name = kind.strip().lower()
+    if name in QUEUE_WRITE_KINDS:
+        try:
+            return _queue_write(name, _action_args(args), idempotency_key)
+        except Exception as exc:
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     feature = WRITE_KINDS.get(name)
     if feature is None:
         return _valid_kinds_error(name)

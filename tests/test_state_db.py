@@ -28,11 +28,11 @@ def _tables(path) -> set[str]:
         connection.close()
 
 
-def test_init_db_creates_the_three_tables(tmp_path):
+def test_init_db_creates_the_state_tables(tmp_path):
     path = state.init_db(tmp_path / "state.db")
 
     assert path.exists()
-    assert {"cache", "digest", "queue"} <= _tables(path)
+    assert {"cache", "digest", "queue", "presets"} <= _tables(path)
 
 
 def test_two_connections_see_each_others_rows(tmp_path):

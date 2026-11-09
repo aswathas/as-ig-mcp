@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-from . import session, tools_health, tools_session, tools_status
+from . import queue, session, tools_health, tools_queue, tools_session, tools_status
 from .session import settings_identity
 
 USAGE = """usage: python -m as_ig_mcp <command>
@@ -19,6 +19,9 @@ commands:
   session status                   show the session and cache state
   status                           show the ig_status report
   health                           probe every capability class
+  queue list                       show the queued posts
+  queue tick                       publish every item that is due
+  queue install-task               register the five-minute Windows task
 """
 
 
@@ -82,6 +85,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "health":
         _emit(tools_health.ig_health())
         return 0
+
+    if command == "queue":
+        action = args[1].strip().lower() if len(args) > 1 else ""
+        if action == "list":
+            _emit(tools_queue.ig_queue(action="list"))
+            return 0
+        if action == "tick":
+            _emit(queue.Queue().publish_due())
+            return 0
+        if action == "install-task":
+            _emit(queue.install_task())
+            return 0
+        print(f"unknown queue command\n\n{USAGE}", file=sys.stderr)
+        return 2
 
     if command == "session":
         action = args[1].strip().lower() if len(args) > 1 else ""

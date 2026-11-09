@@ -30,6 +30,8 @@ EXPECTED_TOOLS = {
     "ig_story",
     "ig_account",
     "ig_insight",
+    "ig_queue",
+    "ig_preset",
 }
 
 

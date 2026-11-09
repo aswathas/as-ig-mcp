@@ -324,14 +324,23 @@ def _journal(
 
 _INITIAL_SHOW_APPROVAL = show_approval
 
+#: Journal marker for a write approved now and executed later by the queue runner.
+DEFERRED = "approved for the queue"
+
 
 def perform_write(
     feature: str,
     args: dict[str, Any] | None = None,
     idempotency_key: str | None = None,
     dialog: Callable[[str], bool | None] | None = show_approval,
+    execute: bool = True,
 ) -> dict[str, Any]:
-    """Approve and execute one write. One call, one decision, one execution."""
+    """Approve and execute one write. One call, one decision, one execution.
+
+    With ``execute=False`` the write is approved exactly as usual and journalled,
+    but the Instagram call is left to the queue runner. The approval travels
+    with the item; the runner publishes an already-approved post.
+    """
     values = dict(args or {})
     if feature not in mapping.FEATURE_METHODS:
         return {"ok": False, "error": f"unknown feature: {feature!r}"}
@@ -353,6 +362,10 @@ def perform_write(
     if decision is False:
         _journal(feature, values, preview, "denied", idempotency_key, "denied by the account owner")
         return {"ok": False, "denied": True, "preview": preview}
+
+    if not execute:
+        _journal(feature, values, preview, "approved", idempotency_key, DEFERRED)
+        return {"ok": True, "approved": True, "preview": preview}
 
     _journal(feature, values, preview, "approved", idempotency_key, audit.EXECUTING)
     try:

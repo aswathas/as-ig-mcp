@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS queue (
     idempotency_key TEXT,
     created_at REAL
 );
+CREATE TABLE IF NOT EXISTS presets (
+    name TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    content TEXT NOT NULL,
+    updated_at REAL
+);
 """
 
 
@@ -72,7 +78,7 @@ def queue_path() -> Path:
 
 
 def presets_path() -> Path:
-    return app_dir() / "presets.json"
+    return db_path()
 
 
 def style_path() -> Path:

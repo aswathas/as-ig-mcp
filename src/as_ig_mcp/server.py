@@ -19,6 +19,8 @@ from . import (
     tools_inbox,
     tools_insight,
     tools_people,
+    tools_preset,
+    tools_queue,
     tools_session,
     tools_status,
     tools_story,
@@ -220,6 +222,54 @@ def ig_write(
         kind=kind,
         idempotency_key=idempotency_key,
         **args,
+    )
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] List, schedule, cancel or natively schedule queued posts; recurrences included."
+)
+def ig_queue(
+    action: str = "list",
+    kind: str | None = None,
+    when: str | None = None,
+    text: str | None = None,
+    media_path: str | None = None,
+    caption: str | None = None,
+    schedule_at: str | None = None,
+    recurrence: str | None = None,
+    item_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    return _safe(
+        tools_queue.ig_queue,
+        action=action,
+        kind=kind,
+        when=when,
+        text=text,
+        media_path=media_path,
+        caption=caption,
+        schedule_at=schedule_at,
+        recurrence=recurrence,
+        item_id=item_id,
+        idempotency_key=idempotency_key,
+    )
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] List, get, save or delete caption, hashtag, first-comment and DM-reply presets."
+)
+def ig_preset(
+    action: str = "list",
+    name: str | None = None,
+    content: str | None = None,
+    kind: str = "caption",
+) -> dict[str, Any]:
+    return _safe(
+        tools_preset.ig_preset,
+        action=action,
+        name=name,
+        content=content,
+        kind=kind,
     )
 
 
