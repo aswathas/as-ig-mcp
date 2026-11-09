@@ -1,13 +1,20 @@
+<!-- mcp-name: io.github.aswathas/as-ig-mcp -->
+
 # AS-IG-MCP
 
 An Instagram MCP server for AI agents. Reads DMs, measures posts, tells you what
 changed since last time, and pushes new messages live. Built on instagrapi
 3.2.8, pinned.
 
-**Status: in build.** Nine of thirteen tools are in and verified live against a
-real account; the write gate, the insights tool, the queue and the realtime
-socket are still to come. See `docs/reviews/capability-checklist.md` for the
-per-capability state and `docs/reviews/build-log.md` for what ran and what broke.
+**Status: v0.1.0 built.** All 16 tools are implemented in code. 10/10 health
+probe classes, profile reads, feed/reels/saved/notifications, DM threads and message
+bodies, account/demographics/media insights, delta digest, and the realtime
+socket worker are verified live against a real account. The interactive confirmation
+dialog gate on mutations, the local publish queue, and live write execution
+are tested offline and scheduled for live end-to-end write testing. DM auto-reply,
+comment auto-reply, and multi-account are parked. See
+`docs/reviews/capability-checklist.md` for the per-capability state and
+`docs/reviews/build-log.md` for what ran and what broke.
 
 ## Why it exists
 
@@ -76,6 +83,20 @@ desktop, writes are refused rather than approved by the agent.
 | `AS_IG_APPROVE_TIMEOUT` | seconds the approval dialog waits | 300 |
 | `AS_IG_CACHE_TTL` | read cache seconds | 90 |
 
+## Data and privacy
+
+- **What it reads:** The Instagram account you log into — user profiles, feed posts, direct message threads and message bodies, notifications, stories, and account insights.
+- **What it stores:** Stored locally on your machine:
+  - An encrypted session (`session.enc`, encrypted with Windows DPAPI under your user account);
+  - A local SQLite database (`state.db`) for caching and delta tracking;
+  - An append-only JSONL audit journal (`audit.jsonl`) recording every mutation attempt;
+  - Presets for captions and hashtag bundles (a table in `state.db`);
+  - Realtime worker logs and status (`events.jsonl`, `realtime_status.json`).
+- **Where data lives:** `%APPDATA%\as-ig-mcp` (or your platform user data directory). No data is ever committed to git.
+- **Data retention:** Data is kept locally on your machine until you choose to delete the directory or clear your session.
+- **External transmission:** None. The only network requests made are directly between your machine and Instagram's servers (`instagram.com` and its MQTT realtime broker). There are no telemetry servers, analytics collectors, or third-party proxies.
+- **Under-18 targeting:** This software does not target or solicit data from persons under the age of 18.
+
 ## Layout
 
 ```
@@ -85,6 +106,7 @@ docs/study/        the market study and the capability matrix
 docs/reviews/      the capability checklist, the build log, the review reports
 ```
 
-## Licence
+## Licence and repository
 
-MIT.
+- Licence: MIT (see [LICENSE](LICENSE)).
+- Repository: [https://github.com/aswathas/as-ig-mcp](https://github.com/aswathas/as-ig-mcp).

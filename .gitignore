@@ -11,3 +11,6 @@ cmd_*.log
 agy_*.log
 *.log
 !docs/**/*.md
+dist/
+build/
+*.egg-info/

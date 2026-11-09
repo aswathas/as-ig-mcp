@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.aswathas/as-ig-mcp",
+  "description": "Instagram for AI agents: read and send DMs, read posts and insights, publish, and see what changed since last time.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/aswathas/as-ig-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "as-ig-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

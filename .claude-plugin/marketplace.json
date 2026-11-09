@@ -1,0 +1,15 @@
+{
+  "name": "as-ig-mcp",
+  "description": "Instagram for AI agents: DMs, posts, insights, and what changed since last time.",
+  "owner": {
+    "name": "Aswath",
+    "url": "https://github.com/aswathas"
+  },
+  "plugins": [
+    {
+      "name": "as-ig-mcp",
+      "source": "./",
+      "description": "Instagram for AI agents: DMs, posts, insights, and what changed since last time."
+    }
+  ]
+}

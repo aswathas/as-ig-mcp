@@ -1,0 +1,30 @@
+{
+  "name": "as-ig-mcp",
+  "description": "Instagram for AI agents: DMs, posts, insights, and what changed since last time.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Aswath"
+  },
+  "homepage": "https://github.com/aswathas/as-ig-mcp",
+  "repository": "https://github.com/aswathas/as-ig-mcp",
+  "license": "MIT",
+  "keywords": [
+    "instagram",
+    "mcp",
+    "social",
+    "dm",
+    "insights"
+  ],
+  "skills": [],
+  "mcpServers": {
+    "as-ig": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "as-ig-mcp==0.1.0",
+        "as-ig-mcp",
+        "serve"
+      ]
+    }
+  }
+}
