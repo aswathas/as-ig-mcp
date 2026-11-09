@@ -1,14 +1,37 @@
-"""Filesystem paths and atomic JSON helpers for AS-IG-MCP state."""
+"""Filesystem paths, the SQLite state file and atomic JSON helpers."""
 
 from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 from pathlib import Path
 from typing import Any
 
 APP_NAME = "as-ig-mcp"
+DB_NAME = "state.db"
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS cache (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    expires_at REAL
+);
+CREATE TABLE IF NOT EXISTS digest (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at REAL
+);
+CREATE TABLE IF NOT EXISTS queue (
+    id TEXT PRIMARY KEY,
+    payload TEXT,
+    scheduled_at REAL,
+    state TEXT,
+    idempotency_key TEXT,
+    created_at REAL
+);
+"""
 
 
 def app_dir() -> Path:
@@ -19,16 +42,21 @@ def app_dir() -> Path:
     return Path.home() / ".as-ig-mcp"
 
 
+def db_path() -> Path:
+    """The one SQLite file holding the cache, the digest and the queue."""
+    return app_dir() / DB_NAME
+
+
 def session_path() -> Path:
     return app_dir() / "session.enc"
 
 
 def cache_path() -> Path:
-    return app_dir() / "cache.json"
+    return db_path()
 
 
 def digest_path() -> Path:
-    return app_dir() / "digest.json"
+    return db_path()
 
 
 def events_path() -> Path:
@@ -40,7 +68,7 @@ def audit_path() -> Path:
 
 
 def queue_path() -> Path:
-    return app_dir() / "queue.json"
+    return db_path()
 
 
 def presets_path() -> Path:
@@ -59,6 +87,32 @@ def ensure_app_dir() -> Path:
     directory = app_dir()
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def connect(path: str | Path | None = None) -> sqlite3.Connection:
+    """Open the state database with WAL and a ten-second busy wait.
+
+    A second process writing at the same time waits for the lock instead of
+    failing, and WAL lets readers run while a writer holds the write lock.
+    The schema is created when missing, so every caller gets a usable file.
+    """
+    target = Path(path) if path is not None else db_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(str(target), timeout=10)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA busy_timeout=10000")
+    connection.executescript(_SCHEMA)
+    connection.commit()
+    return connection
+
+
+def init_db(path: str | Path | None = None) -> Path:
+    """Create the state tables if they do not exist and return the file path."""
+    target = Path(path) if path is not None else db_path()
+    connection = connect(target)
+    connection.close()
+    return target
 
 
 def atomic_write_bytes(path: str | Path, data: bytes) -> None:

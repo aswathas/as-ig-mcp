@@ -42,6 +42,7 @@ MUTATING_METHODS: frozenset[str] = frozenset(
     direct_thread_unmute_video_call direct_pending_approve direct_request_approve
     photo_upload photo_configure video_upload video_configure clip_upload clip_configure
     album_upload album_configure igtv_upload igtv_configure
+    quicksnap_send quicksnap_delete
     photo_upload_to_story photo_upload_to_story_with_music video_upload_to_story
     photo_upload_to_cutout_sticker video_upload_to_cutout_sticker
     photo_configure_to_story photo_configure_to_cutout_sticker
@@ -84,6 +85,9 @@ FEATURE_METHODS: dict[str, dict] = {
     "unfollow": _entry("user_unfollow", "rest", "Unfollow an account.", read_only=False),
     "block": _entry("user_block", "rest", "Block an account.", read_only=False),
     "mute": _entry("mute_posts_from_follow", "rest", "Mute posts from an account.", read_only=False),
+    "mute_stories": _entry(
+        "mute_stories_from_follow", "rest", "Mute stories from an account.", read_only=False
+    ),
     "unblock": _entry("user_unblock", "rest", "Unblock an account.", read_only=False),
     "report": _entry("user_report", "rest", "Report an account.", read_only=False),
     "remove_follower": _entry("user_remove_follower", "rest", "Remove an account from followers.", read_only=False),
@@ -143,6 +147,17 @@ FEATURE_METHODS: dict[str, dict] = {
     "publish_reel": _entry("clip_upload", "rest", "Publish a reel.", read_only=False),
     "publish_album": _entry("album_upload", "rest", "Publish a carousel album.", read_only=False),
     "publish_story": _entry("photo_upload_to_story", "rest", "Publish a photo to stories.", read_only=False),
+    "igtv_upload": _entry("igtv_upload", "rest", "Publish a long-form IGTV video.", read_only=False),
+    "quicksnap_send": _entry(
+        "quicksnap_send", "rest", "Send a disappearing photo to mutual followers.", read_only=False
+    ),
+    "cutout_sticker": _entry(
+        "photo_upload_to_cutout_sticker",
+        "rest",
+        "Upload a photo as a cutout sticker.",
+        fallback="video_upload_to_cutout_sticker",
+        read_only=False,
+    ),
     "media_download": _entry("photo_download", "rest", "Download media for a post."),
     "save_media": _entry("media_save", "rest", "Save or unsave a post.", read_only=False),
     "crosspost": _entry(
@@ -170,6 +185,9 @@ FEATURE_METHODS: dict[str, dict] = {
     "archived": _entry("archive_medias", "rest", "The account's archived media."),
     "comments": _entry("media_comments", "rest", "Comments on a media item."),
     "comment_reply": _entry("media_comment", "rest", "Post a comment or reply.", read_only=False),
+    "first_comment": _entry(
+        "media_comment", "rest", "Post the author's first comment on a post.", read_only=False
+    ),
     "comment_bulk_delete": _entry("comment_bulk_delete", "rest", "Delete several comments at once.", read_only=False),
     "comment_pin": _entry("comment_pin", "rest", "Pin or unpin a comment.", read_only=False),
     "toggle_comments": _entry("media_edit", "rest", "Turn comments on or off for a post.", read_only=False),
@@ -224,6 +242,7 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "block",
         "unblock",
         "mute",
+        "mute_stories",
         "report",
         "remove_follower",
         "follow_request_approve",
@@ -258,12 +277,16 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "publish_reel",
         "publish_album",
         "publish_story",
+        "igtv_upload",
+        "quicksnap_send",
+        "cutout_sticker",
         "crosspost",
         "collaborate",
     ],
     "comments": [
         "comments",
         "comment_reply",
+        "first_comment",
         "comment_bulk_delete",
         "comment_pin",
         "toggle_comments",

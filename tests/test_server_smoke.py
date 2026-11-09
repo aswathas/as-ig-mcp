@@ -29,6 +29,7 @@ EXPECTED_TOOLS = {
     "ig_inbox",
     "ig_story",
     "ig_account",
+    "ig_insight",
 }
 
 

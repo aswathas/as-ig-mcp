@@ -17,6 +17,7 @@ from . import (
     tools_feed,
     tools_health,
     tools_inbox,
+    tools_insight,
     tools_people,
     tools_session,
     tools_status,
@@ -173,6 +174,30 @@ def ig_story(
 )
 def ig_account() -> dict[str, Any]:
     return _safe(tools_account.ig_account)
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] Insights: one media post, account units, Instagram's best ranking, best posting time, age-matched comparison, or demographics."
+)
+def ig_insight(
+    kind: str = "media",
+    media_pk: str | None = None,
+    username: str | None = None,
+    user_id: str | None = None,
+    time_frame: str = "ONE_WEEK",
+    order_by: str = "REACH_COUNT",
+    limit: int = 10,
+) -> dict[str, Any]:
+    return _safe(
+        tools_insight.ig_insight,
+        kind=kind,
+        media_pk=media_pk,
+        username=username,
+        user_id=user_id,
+        time_frame=time_frame,
+        order_by=order_by,
+        limit=limit,
+    )
 
 
 @mcp.tool(

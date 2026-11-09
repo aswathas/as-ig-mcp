@@ -52,7 +52,7 @@ def _status() -> dict[str, Any]:
         "present": True,
         "username": identity["username"],
         "user_id": identity["user_id"],
-        "source": "file",
+        "source": session.session_source(settings),
     }
     result["token"] = {
         "fetchable": bool(identity["sessionid"]),
@@ -91,6 +91,16 @@ def ig_session(action: str = "status") -> dict[str, Any]:
         return {"ok": True, "settings": _redact(settings)}
 
     if action == "relogin":
-        return {"ok": False, "error": "relogin lands in phase 5"}
+        command = "python -m as_ig_mcp session relogin"
+        return {
+            "ok": False,
+            "action": action,
+            "command": command,
+            "error": (
+                "relogin runs on the terminal, not through the agent: it needs the "
+                f"account password, which the server never stores. Run `{command}` "
+                "and type the password and any emailed code there."
+            ),
+        }
 
     return {"ok": False, "error": f"unknown action: {action}"}

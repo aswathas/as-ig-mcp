@@ -1,17 +1,22 @@
-"""DPAPI-encrypted session storage for AS-IG-MCP."""
+"""DPAPI-encrypted session storage and the password login flow."""
 
 from __future__ import annotations
 
 import ctypes
+import getpass
 import json
 import re
 from ctypes import wintypes
-from typing import Any
+from typing import Any, Callable
+
+from instagrapi import Client
+from instagrapi.exceptions import TwoFactorRequired
 
 from . import state
 
 DEFAULT_ENTROPY = b"as-ig-mcp"
 CRYPTPROTECT_UI_FORBIDDEN = 0x1
+SOURCE_KEY = "_as_ig_source"
 
 
 class SessionError(Exception):
@@ -112,8 +117,11 @@ def decrypt_bytes(blob: bytes, entropy: bytes = DEFAULT_ENTROPY) -> bytes:
     return _take_output(out_blob)
 
 
-def save_session(settings: dict[str, Any]) -> None:
-    payload = json.dumps(settings, ensure_ascii=False).encode("utf-8")
+def save_session(settings: dict[str, Any], source: str | None = None) -> None:
+    values = dict(settings)
+    if source:
+        values[SOURCE_KEY] = source
+    payload = json.dumps(values, ensure_ascii=False).encode("utf-8")
     state.atomic_write_bytes(state.session_path(), encrypt_bytes(payload))
 
 
@@ -136,6 +144,89 @@ def clear_session() -> None:
     path = state.session_path()
     if path.exists():
         path.unlink()
+
+
+def session_source(settings: dict[str, Any] | None) -> str:
+    """How the stored session was created: the password flow or a file import."""
+    if not settings:
+        return "none"
+    source = settings.get(SOURCE_KEY)
+    return str(source) if source else "file"
+
+
+def _scrub(text: Any, password: str) -> str:
+    message = str(text)
+    if password:
+        message = message.replace(password, "<redacted>")
+    return message
+
+
+def login_with_password(
+    *,
+    username: str | None = None,
+    password: str | None = None,
+    relogin: bool = False,
+    client_factory: Callable[[], Any] | None = None,
+    ask_username: Callable[[str], str] | None = None,
+    ask_password: Callable[[str], str] | None = None,
+    ask_code: Callable[[str], str] | None = None,
+    emit: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Log in with the account password and save the resulting session.
+
+    The password is read from a no-echo prompt (``getpass``) and is never
+    printed, stored or logged. When Instagram asks for a two-factor or email
+    code, the prompt asks for it once and retries the login exactly once.
+    """
+    ask_username = ask_username or (lambda prompt: input(prompt))
+    ask_password = ask_password or getpass.getpass
+    ask_code = ask_code or (lambda prompt: input(prompt))
+    emit = emit or print
+    factory = client_factory or Client
+
+    if username is None:
+        username = str(ask_username("Instagram username: ")).strip()
+    if not username:
+        return {"ok": False, "error": "no username given"}
+
+    if password is None:
+        password = ask_password("Instagram password: ")
+    if not password:
+        return {"ok": False, "error": "no password given"}
+
+    platform = factory()
+    try:
+        platform.login(username, password, relogin=relogin)
+    except TwoFactorRequired:
+        emit("enter the code from the email or the app:")
+        code = str(ask_code("Verification code: ")).strip()
+        if not code:
+            return {"ok": False, "error": "a verification code is required to finish login"}
+        try:
+            platform.login(username, password, verification_code=code)
+        except Exception as exc:
+            message = f"{type(exc).__name__}: {exc}"
+            return {"ok": False, "error": _scrub(message, password)}
+    except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}"
+        return {"ok": False, "error": _scrub(message, password)}
+
+    settings = platform.get_settings()
+    if not isinstance(settings, dict):
+        return {"ok": False, "error": "Instagram did not return session settings"}
+    settings = dict(settings)
+    settings.setdefault("username", username)
+    try:
+        save_session(settings, source="password")
+    except Exception as exc:
+        return {"ok": False, "error": _scrub(f"{type(exc).__name__}: {exc}", password)}
+
+    identity = settings_identity(settings)
+    return {
+        "ok": True,
+        "username": identity["username"],
+        "user_id": identity["user_id"],
+    }
 
 
 _SESSIONID_PREFIX = re.compile(r"^(\d+)")

@@ -1,12 +1,15 @@
-"""TTL cache on disk, shared safely between processes."""
+"""TTL cache in the shared SQLite state file, safe between processes."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
+
+import sqlite3
 
 from . import state
 
@@ -26,82 +29,97 @@ def make_key(feature: str, params: Any = None) -> str:
 
 
 class Cache:
-    """A JSON-file cache of ``{key: {"value": ..., "expires_at": <epoch>}}``."""
+    """A TTL cache backed by the ``cache`` table in ``state.db``.
+
+    Each key is one row, so two processes writing different keys cannot lose
+    each other's entries the way the old whole-file JSON rewrite could.
+    """
 
     def __init__(
         self,
         path: str | Path | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        self._path = Path(path) if path is not None else state.cache_path()
+        self._path = Path(path) if path is not None else state.db_path()
         self._clock = clock
 
-    def _read(self) -> dict[str, dict]:
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        connection = state.connect(self._path)
         try:
-            raw = self._path.read_bytes()
-        except OSError:
-            return {}
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-            return {}
-        if not isinstance(data, dict):
-            return {}
-        return {key: entry for key, entry in data.items() if isinstance(entry, dict)}
-
-    def _write(self, entries: dict[str, dict]) -> None:
-        payload = json.dumps(entries, ensure_ascii=False).encode("utf-8")
-        state.atomic_write_bytes(self._path, payload)
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def get(self, key: str) -> Any:
         """Return the value when present and unexpired; drop it when expired."""
-        entries = self._read()
-        entry = entries.get(key)
-        if entry is None:
-            return None
-        if entry.get("expires_at", 0) <= self._clock():
-            del entries[key]
-            self._write(entries)
-            return None
-        return entry.get("value")
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT value, expires_at FROM cache WHERE key = ?", (key,)
+            ).fetchone()
+            if row is None:
+                return None
+            expires_at = row["expires_at"]
+            if expires_at is None or expires_at <= self._clock():
+                connection.execute("DELETE FROM cache WHERE key = ?", (key,))
+                return None
+            try:
+                return json.loads(row["value"])
+            except (TypeError, ValueError):
+                return None
 
     def set(self, key: str, value: Any, ttl: int = DEFAULT_TTL) -> None:
-        entries = self._read()
-        entries[key] = {"value": value, "expires_at": self._clock() + ttl}
-        self._write(entries)
+        payload = json.dumps(value, ensure_ascii=False, default=str)
+        expires_at = self._clock() + ttl
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    expires_at = excluded.expires_at
+                """,
+                (key, payload, expires_at),
+            )
 
     def invalidate(self, key: str | None = None) -> int:
         """Remove one key, or every key when ``key`` is ``None``.
 
         Returns the number of entries removed.
         """
-        entries = self._read()
-        if key is None:
-            removed = len(entries)
-            self._write({})
-            return removed
-        if key in entries:
-            del entries[key]
-            self._write(entries)
-            return 1
-        return 0
+        with self._connection() as connection:
+            if key is None:
+                cursor = connection.execute("DELETE FROM cache")
+            else:
+                cursor = connection.execute("DELETE FROM cache WHERE key = ?", (key,))
+            return max(cursor.rowcount, 0)
 
     def invalidate_prefix(self, prefix: str) -> int:
         """Remove every key that starts with ``prefix``.
 
-        Returns the number of entries removed.
+        Returns the number of entries removed. ``substr`` compares the literal
+        prefix, so SQL wildcards in a key never widen the match.
         """
-        entries = self._read()
-        matching = [key for key in entries if key.startswith(prefix)]
-        if not matching:
-            return 0
-        for key in matching:
-            del entries[key]
-        self._write(entries)
-        return len(matching)
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM cache WHERE substr(key, 1, ?) = ?",
+                (len(prefix), prefix),
+            )
+            return max(cursor.rowcount, 0)
 
     def stats(self) -> dict[str, int]:
-        entries = self._read()
         now = self._clock()
-        live = sum(1 for entry in entries.values() if entry.get("expires_at", 0) > now)
-        return {"total": len(entries), "live": live, "expired": len(entries) - live}
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COALESCE(SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END), 0) AS live
+                FROM cache
+                """,
+                (now,),
+            ).fetchone()
+        total = int(row["total"])
+        live = int(row["live"])
+        return {"total": total, "live": live, "expired": total - live}

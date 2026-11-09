@@ -13,6 +13,8 @@ from .session import settings_identity
 USAGE = """usage: python -m as_ig_mcp <command>
 
 commands:
+  session login                    log in with username and password (first run)
+  session relogin                  log in again and replace the stored session
   session import <settings.json>   validate and save a settings file
   session status                   show the session and cache state
   status                           show the ig_status report
@@ -86,6 +88,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if action == "status":
             _emit(tools_session.ig_session("status"))
             return 0
+        if action in ("login", "relogin"):
+            payload = session.login_with_password(relogin=(action == "relogin"))
+            _emit(payload)
+            return 0 if payload.get("ok") else 1
         if action == "import":
             if len(args) < 3:
                 print("usage: python -m as_ig_mcp session import <settings.json>", file=sys.stderr)

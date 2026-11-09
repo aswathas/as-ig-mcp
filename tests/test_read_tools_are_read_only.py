@@ -8,6 +8,7 @@ from as_ig_mcp import (
     tools_discovery,
     tools_feed,
     tools_inbox,
+    tools_insight,
     tools_people,
     tools_story,
     tools_threads,
@@ -19,6 +20,7 @@ READ_TOOL_FEATURES = (
     | set(tools_feed.FEATURES)
     | set(tools_threads.FEATURES)
     | set(tools_inbox.FEATURES)
+    | set(tools_insight.FEATURES)
     | set(tools_story.FEATURES)
     | set(tools_account.FEATURES)
 )

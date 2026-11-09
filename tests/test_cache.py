@@ -15,14 +15,14 @@ class FakeClock:
 
 
 def test_set_then_get_returns_the_value(tmp_path):
-    cache = Cache(tmp_path / "cache.json", clock=FakeClock())
+    cache = Cache(tmp_path / "state.db", clock=FakeClock())
     cache.set("profile:one", {"username": "aswath"}, ttl=30)
     assert cache.get("profile:one") == {"username": "aswath"}
 
 
 def test_get_returns_none_after_the_ttl(tmp_path):
     clock = FakeClock()
-    cache = Cache(tmp_path / "cache.json", clock=clock)
+    cache = Cache(tmp_path / "state.db", clock=clock)
     cache.set("profile:one", "value", ttl=10)
     clock.advance(11)
     assert cache.get("profile:one") is None
@@ -30,7 +30,7 @@ def test_get_returns_none_after_the_ttl(tmp_path):
 
 def test_stats_counts_live_and_expired(tmp_path):
     clock = FakeClock()
-    cache = Cache(tmp_path / "cache.json", clock=clock)
+    cache = Cache(tmp_path / "state.db", clock=clock)
     cache.set("live", "a", ttl=100)
     cache.set("expired", "b", ttl=5)
     clock.advance(10)
@@ -39,7 +39,7 @@ def test_stats_counts_live_and_expired(tmp_path):
 
 
 def test_invalidate_removes_one_key(tmp_path):
-    cache = Cache(tmp_path / "cache.json", clock=FakeClock())
+    cache = Cache(tmp_path / "state.db", clock=FakeClock())
     cache.set("one", 1)
     cache.set("two", 2)
 
@@ -49,7 +49,7 @@ def test_invalidate_removes_one_key(tmp_path):
 
 
 def test_invalidate_with_no_key_clears_everything(tmp_path):
-    cache = Cache(tmp_path / "cache.json", clock=FakeClock())
+    cache = Cache(tmp_path / "state.db", clock=FakeClock())
     cache.set("one", 1)
     cache.set("two", 2)
 
@@ -57,9 +57,8 @@ def test_invalidate_with_no_key_clears_everything(tmp_path):
     assert cache.stats() == {"total": 0, "live": 0, "expired": 0}
 
 
-def test_corrupt_cache_file_is_treated_as_empty(tmp_path):
-    path = tmp_path / "cache.json"
-    path.write_bytes(b"this is not json")
+def test_the_cache_database_is_created_on_first_use(tmp_path):
+    path = tmp_path / "state.db"
 
     cache = Cache(path, clock=FakeClock())
     assert cache.get("anything") is None
@@ -67,10 +66,11 @@ def test_corrupt_cache_file_is_treated_as_empty(tmp_path):
 
     cache.set("anything", "value")
     assert cache.get("anything") == "value"
+    assert path.exists()
 
 
 def test_two_different_keys_do_not_collide(tmp_path):
-    cache = Cache(tmp_path / "cache.json", clock=FakeClock())
+    cache = Cache(tmp_path / "state.db", clock=FakeClock())
     first = make_key("profile", {"user_id": "1"})
     second = make_key("profile", {"user_id": "2"})
     assert first != second
@@ -86,7 +86,7 @@ def test_make_key_is_stable_across_param_order():
 
 
 def test_invalidate_prefix_removes_only_matching_keys(tmp_path):
-    cache = Cache(tmp_path / "cache.json", clock=FakeClock())
+    cache = Cache(tmp_path / "state.db", clock=FakeClock())
     cache.set("profile:user1", {"name": "alice"})
     cache.set("profile:user2", {"name": "bob"})
     cache.set("posts:post1", {"caption": "hello"})
