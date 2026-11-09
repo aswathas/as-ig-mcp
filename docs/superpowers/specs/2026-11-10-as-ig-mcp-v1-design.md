@@ -50,7 +50,7 @@ market covers, plus the ones nobody covers.
 **In (v1)**
 
 - 16 tools covering the capabilities listed in the acceptance list,
-  `docs/reviews/capability-checklist.md` (37 rows, one row per capability, each
+  `docs/reviews/capability-checklist.md` (45 rows, one row per capability, each
   with a check) — a superset of every Instagram MCP server and every commercial
   tool's Instagram surface, minus what is structurally impossible for a local
   single-user tool. The market comparison behind that claim is
@@ -111,9 +111,11 @@ market covers, plus the ones nobody covers.
    for that thread — `ig_inbox` takes an optional `thread_id` so a specific
    thread can be checked; `ig_person` profile equals `ig_status` account info.
 4. A server restart completes a read with **no email code and no re-login**.
-5. Every write without a confirm code returns `needs_confirm` + preview + a
-   6-digit code and performs **no** Instagram mutation — verified by reading the
-   thread afterwards and finding nothing new.
+5. Every write without a confirm code returns `needs_confirm` + a preview + the
+   action handle, and performs **no** Instagram mutation — verified by reading
+   the thread afterwards and finding nothing new. The 6-digit code is shown to
+   the account owner and never returned to the agent, so the agent can only
+   complete a write by passing back a code the owner read.
 6. `ig_write` with the correct code sends exactly one message; replaying the
    same idempotency key reports "already done" and sends nothing.
 7. `ig_digest` twice in a row: the first reports changes, the second reports
@@ -260,8 +262,10 @@ as-ig-mcp/
    chat, and the agent passes it back as `confirm=`. The second call with the
    matching code executes once; an idempotency key makes a repeat a no-op. Every
    attempt is journalled to `audit.jsonl`. When no interactive desktop is
-   available, the fallback is a file the owner opens
-   (`%APPDATA%\as-ig-mcp\pending.txt`), and the tool says so plainly.
+   available, the owner approves from a terminal instead:
+   `python -m as_ig_mcp approve <handle>` prints the code in that terminal.
+   The code is never written to a file the agent can read — a readable file
+   would give the agent the approval it is supposed to be asking for.
 7. **Scheduled work is confirmed at enqueue time.** `ig_queue` and Instagram's
    native `schedule_at` both take the confirm code when the item is queued; the
    item carries that approval with it, and the five-minute runner publishes an
@@ -271,6 +275,11 @@ as-ig-mcp/
 8. Any write clears the cache entries it touched (`cache.invalidate_prefix`), and
    the digest compares against live state, never against the cache — otherwise
    a digest could report "nothing changed" from stale cached reads.
+9. **A write never falls back to another method.** The REST↔GraphQL fallback
+   exists for reads, where a second attempt costs nothing. For a write, a
+   failed response is reported to the owner and not retried by us, because
+   Instagram may have accepted it before the response failed to parse. One
+   attempt, one outcome, and the audit journal records which.
 9. `ig_health` calls one representative method per endpoint class (REST
    profile, GraphQL feed, GraphQL followers, GraphQL threads, GraphQL search,
    GraphQL stories, DM read, DM write preview, insights, business DM box,
@@ -305,7 +314,7 @@ as-ig-mcp/
 | `ig_feed` | `kind=posts\|reels\|tagged\|saved\|archive\|notifications\|collections\|tray\|guides\|liked` |
 | `ig_story` | story and highlight detail, viewers, likers, download |
 | `ig_digest` | what changed since the last call; `wait_s` long-polls realtime events |
-| `ig_insight` | `kind=media\|account\|best\|compare\|demographics` |
+| `ig_insight` | `kind=media\|account\|best\|best_time\|compare\|demographics`. `best` is Instagram's own ranked posts for a window and ordering key. `best_time` is the posting-window recommendation computed from our own account insights — the thing Metricool sells. `compare` ranks our posts against each other by a chosen metric, and combined with `ig_person` on another account it is the local competitor comparison. |
 | `ig_write` | every write below, behind one confirm gate. This is the only path that mutates. |
 | `ig_queue` | list, schedule, cancel, recurring posts, native Instagram schedule. The local queue needs a runner: a Windows Scheduled Task that runs `python -m as_ig_mcp queue tick` every five minutes, installed once by the user. Instagram's own `schedule_at` stays the server-independent path, so a scheduled post survives our machine being off. |
 | `ig_preset` | caption, hashtag and first-comment presets — local, product-only everywhere else |
@@ -320,7 +329,10 @@ reel, carousel, story, IGTV, quicksnap, cutout sticker), `schedule`,
 `bulk_delete_comments`, `toggle_comments`, `follow`, `unfollow`, `block`,
 `mute`, `report`, `remove_follower`, `close_friend`, `follow_hashtag`,
 `highlight`, `note`, `profile`, `category`, `ai_label`, `crosspost`,
-`collaborate`.
+`collaborate`, plus the ones the prose names elsewhere: `share`, `report`,
+`remove_follower`, `toggle_comments`, `thread_hide`, `thread_title`,
+`thread_group_members`, `follow_request_approve`, `follow_request_decline`,
+`mute_stories`, `unblock`.
 
 In that list: **IGTV** is Instagram's long-form video format, a separate upload
 endpoint from a reel. **Quicksnap** is Instagram's disappearing photo, sent to
@@ -354,7 +366,13 @@ top search `fbsearch_topsearch_v2`; users `search_users`; suggestions
 `user_suggested_profiles`; highlights `user_highlights_v1`, `highlight_create`,
 `highlight_edit`, `highlight_change_cover`, `highlight_delete`; follow
 `user_follow` / `user_unfollow`; block `user_block`; mute
-`mute_posts_from_follow`; close friends `close_friend_add`; crosspost
+`mute_posts_from_follow` and `mute_stories_from_follow`; close friends
+`close_friend_add`; report `user_report`; remove follower
+`user_remove_follower`; unblock `user_unblock`; share `direct_media_share` /
+`direct_profile_share` / `direct_story_share`; thread hide `direct_thread_hide`;
+thread title `direct_thread_update_title`; group members
+`direct_thread_add_users` / `direct_thread_remove_users`; follow requests
+`user_follow_request_approve` / `user_follow_request_decline`; crosspost
 `media_share_to_threads_config`, `media_share_to_fb_unified_config`;
 collaboration `coauthor_user_ids` on the upload methods; profile edit
 `account_edit`, `account_set_biography`, `set_external_url`; category
@@ -413,7 +431,8 @@ reply-style store.
 | Realtime socket dies or Instagram closes it | reader thread raises, or `ig_health` socket probe fails | realtime state shows disconnected | reconnect with backoff; fall back to polling |
 | Realtime payload shape changes | unknown event kind | event recorded as `unknown` with the raw payload | keep serving; the digest still works |
 | Rate limited | HTTP 429 | status and retry-after | backoff, then report |
-| Write called without or with a wrong confirm code | confirm check | `needs_confirm` + preview + code, no mutation | nothing sent; a wrong code is refused |
+| Write called without or with a wrong confirm code | confirm check | `needs_confirm` + preview + action handle, no mutation; the code itself goes to the owner, not the agent | nothing sent; a wrong code is refused |
+| A write's response fails to parse | the exception after a POST | "the request may have gone through — check before retrying" | never retried automatically, never fallen back to another method; the owner decides |
 | Same write submitted twice | idempotency key | "already done" | no second message, no second post |
 | Queue item fires while the machine is asleep | item overdue at next start | "2 items were overdue" | publishes late, marks them, and tells the user |
 | DPAPI decrypt fails (different Windows user) | decrypt error at startup | "session belongs to another Windows user" | starts with no session and asks for a relogin |
@@ -437,7 +456,9 @@ No write is auto-retried after a partial failure. The operator decides.
 4. **Persistence test**: stop the server, start it again, read a thread — no
    email code.
 5. **Write-gate test**: `ig_write kind=send_message` without confirm →
-   `needs_confirm`; read the thread → no new message; with the code → exactly
+   `needs_confirm` + preview + handle, and the tool result contains no 6-digit
+   code; read the thread → no new message; the account owner reads the code
+   from the popup, states it, and the agent passes it as `confirm` → exactly
    one message; replay the same idempotency key → "already done".
 6. **Audit test**: `audit.jsonl` contains the rejected attempt, the approved
    attempt, and the target thread id.
