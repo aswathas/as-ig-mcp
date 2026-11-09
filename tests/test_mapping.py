@@ -2,7 +2,12 @@
 
 from instagrapi import Client
 
-from as_ig_mcp.mapping import FEATURES_BY_AREA, FEATURE_METHODS
+from as_ig_mcp.mapping import (
+    FEATURES_BY_AREA,
+    FEATURE_METHODS,
+    MUTATING_FEATURES,
+    MUTATING_METHODS,
+)
 
 REQUIRED_FEATURES = {
     "profile",
@@ -103,3 +108,40 @@ def test_every_named_method_exists_on_the_client_class():
         assert hasattr(Client, entry["method"]), (feature, entry["method"])
         if entry.get("fallback"):
             assert hasattr(Client, entry["fallback"]), (feature, entry["fallback"])
+
+
+def test_every_entry_has_read_only_boolean():
+    for feature, entry in FEATURE_METHODS.items():
+        assert "read_only" in entry, feature
+        assert isinstance(entry["read_only"], bool), feature
+
+
+def test_mutating_features_matches_entries_whose_method_is_in_mutator_list():
+    expected = {
+        feature
+        for feature, entry in FEATURE_METHODS.items()
+        if entry["method"] in MUTATING_METHODS
+    }
+    assert MUTATING_FEATURES == expected
+    assert set(MUTATING_FEATURES) == {
+        feature
+        for feature, entry in FEATURE_METHODS.items()
+        if not entry["read_only"]
+    }
+
+
+def test_notifications_feature_maps_to_news_inbox_v1_and_is_read_only():
+    entry = FEATURE_METHODS["notifications"]
+    assert entry["method"] == "news_inbox_v1"
+    assert entry["transport"] == "rest"
+    assert entry["read_only"] is True
+    assert "activity feed" in entry["summary"].lower()
+
+
+def test_no_read_only_feature_maps_to_a_method_from_the_mutator_list():
+    for feature, entry in FEATURE_METHODS.items():
+        if entry["read_only"]:
+            assert entry["method"] not in MUTATING_METHODS, (feature, entry["method"])
+            if entry.get("fallback"):
+                assert entry["fallback"] not in MUTATING_METHODS, (feature, entry["fallback"])
+

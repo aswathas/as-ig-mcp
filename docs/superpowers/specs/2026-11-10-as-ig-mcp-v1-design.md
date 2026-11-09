@@ -130,6 +130,11 @@ market covers, plus the ones nobody covers.
     from a clean Claude Code session.
 15. `ig_search kind=place` either returns results or reports "unsupported" — it
     never raises a raw client error.
+16. **No read path can mutate.** Calling a feature whose mapping entry is not
+    read-only, without `allow_write=True`, raises and the underlying instagrapi
+    method is never called. Verified with a fake client that records calls.
+17. **One live login on the account.** The `sessionid` our server holds equals the
+    one the vendor daemon holds. Verified by comparing the two session stores.
 
 ## 4. Constraints & environment
 
@@ -234,9 +239,17 @@ as-ig-mcp/
 5. `ig_digest` compares current state against `digest.json` and rewrites the
    markers; with `wait_s` it also long-polls the realtime queue.
 6. Writes pass through `writes.py`: the first call stores the pending action,
-   returns `needs_confirm` + a preview + a 6-digit code, and performs nothing.
-   The second call with the matching code executes once; an idempotency key
-   makes a repeat a no-op. Every attempt is journalled to `audit.jsonl`.
+   shows the account owner a 6-digit code in a Windows popup (MessageBox through
+   `ctypes`), and returns **the action handle and the preview, never the code**
+   — the agent cannot approve on the account owner's behalf. The owner reads the
+   code, types it in chat, and the agent passes it back as `confirm=`. The
+   second call with the matching code executes once; an idempotency key makes a
+   repeat a no-op. Every attempt is journalled to `audit.jsonl`. When no
+   interactive desktop is available, the fallback is a file the owner opens
+   (`%APPDATA%\as-ig-mcp\pending.txt`), and the tool says so plainly.
+7. Any write clears the cache entries it touched (`cache.invalidate_prefix`), and
+   the digest compares against live state, never against the cache — otherwise
+   a digest could report "nothing changed" from stale cached reads.
 7. `ig_health` calls one representative method per endpoint class (REST
    profile, GraphQL feed, GraphQL followers, GraphQL threads, GraphQL search,
    GraphQL stories, DM read, DM write preview, insights, business DM box,
@@ -269,7 +282,7 @@ as-ig-mcp/
 | `ig_digest` | what changed since the last call; `wait_s` long-polls realtime events |
 | `ig_insight` | `kind=media\|account\|best\|compare\|demographics` |
 | `ig_write` | every write below, behind one confirm gate |
-| `ig_queue` | list, schedule, cancel, recurring posts, native Instagram schedule |
+| `ig_queue` | list, schedule, cancel, recurring posts, native Instagram schedule. The local queue needs a runner: a Windows Scheduled Task that runs `python -m as_ig_mcp queue tick` every five minutes, installed once by the user. Instagram's own `schedule_at` stays the server-independent path, so a scheduled post survives our machine being off. |
 | `ig_preset` | caption, hashtag and first-comment presets — local, product-only everywhere else |
 | `ig_health` | live/dead per endpoint class, with the remedy named |
 | `ig_session` | status, relogin with the emailed code, cache clear, export, linked accounts |
@@ -297,8 +310,9 @@ thread messages `direct_messages`; DM search `direct_message_search`; presence
 unsend `direct_message_unsend`; publish `photo_upload` / `video_upload` /
 `clip_upload` / `album_upload` / `photo_upload_to_story`; native schedule the
 same methods with `schedule_at`; comments `media_comments` / `media_comment` /
-`comment_bulk_delete` / `comment_pin`; notifications `notification_likes`,
-`notification_comments`, `notification_new_follower`, `notification_user_tagged`;
+`comment_bulk_delete` / `comment_pin`; notifications `news_inbox_v1` — **not**
+`notification_likes` and its siblings, which are settings mutators that POST to
+`notifications/change_notification_settings/` with a default of `"off"`;
 notes `get_notes`, `create_note`, `media_note_create`; hashtag
 `hashtag_info`, `hashtag_medias_top`, `hashtag_medias_recent`, `hashtag_follow`;
 place `fbsearch_places`, `location_search`; music `search_music`, `music_trending`;
@@ -311,6 +325,24 @@ top search `fbsearch_topsearch_v2`; users `search_users`; suggestions
 collaboration `coauthor_user_ids` on the upload methods; profile edit
 `account_edit`, `account_set_biography`, `set_external_url`; category
 `account_convert_to_professional`; AI label `account_set_ai_info`.
+
+**Read-only is a property of the mapping, not a promise.** Every entry in
+`mapping.py` declares `read_only: True` or `False`, decided by reading the
+installed instagrapi source. `client.call_feature` refuses a non-read-only
+feature unless the caller passes `allow_write=True`, and only the write module
+does that. A read path therefore cannot mutate the account — the guard is
+structural, not a code-review habit. Anything ambiguous is treated as a write.
+This exists because instagrapi mixes readers and mutators under similar names:
+`notification_likes(setting_value="off")` reads like a getter and silently
+turns notifications off.
+
+**Verification depth.** The core capabilities (everything in the capability
+checklist) are verified with a live call. The exotic write kinds — IGTV,
+quicksnap, cutout sticker, collaboration invite, crosspost, category
+conversion, professional type, AI label — stay in the mapping, because a
+mapping entry is one line, but they are verified by unit test only: the method
+exists and is callable with the documented arguments. No live call is made for
+them.
 
 **Realtime** — one daemon thread per server run. On the main thread
 `rt.direct_subscribe()` runs once (it reads `seq_id` and `snapshot_at_ms` from
@@ -440,6 +472,15 @@ Agent implements. Each phase ends with a runnable check.
   private API dies.
 - D5. DM auto-reply, comment auto-reply and multi-account are parked, with
   designs captured.
+- D6. The exotic write kinds (IGTV, quicksnap, cutout sticker, collaboration
+  invite, crosspost, category conversion, professional type, AI label) stay in
+  the mapping but are verified by unit test only — no live call, no live
+  account mutation.
+- D7. The confirm code is shown to the account owner in a Windows popup, never
+  returned to the agent. The agent receives the action handle and the preview
+  and asks the owner for the code.
+- D8. The local publish queue is ticked by a Windows Scheduled Task every five
+  minutes; Instagram's native `schedule_at` is the server-independent path.
 
 **Risks**
 
@@ -468,6 +509,36 @@ Agent implements. Each phase ends with a runnable check.
 - M8. The private API is the ToS-violating path the commercial vendors warn
   about. That liability is ours, and it is the main reason for the confirm
   gate, the cache, the throttling and the health tool.
+- M9. **Found by the EGM Stage 5 review and fixed.** instagrapi mixes readers
+  and mutators under similar names. `notification_likes`, `notification_comments`,
+  `notification_new_follower` and `notification_user_tagged` are settings
+  mutators that default to `"off"`. The first version of the mapping table
+  listed them as readers, and a live health probe muted those four notification
+  categories on the real account. The account was repaired by setting all four
+  back to `"everyone"`. The permanent fix is the `read_only` flag on every
+  mapping entry plus the `allow_write` guard in `client.call_feature`, so a read
+  path cannot mutate anything. This is the failure mode most likely to bite an
+  agent that trusts method names.
+- M10. **Found by the EGM Stage 5 review.** A confirm code returned in the tool
+  result proves a two-step flow, not human consent, because the same agent
+  receives the code. Fixed by showing the code to the account owner in a Windows
+  popup and returning only the action handle to the agent.
+- M11. **Found by the EGM Stage 5 review.** A local publish queue with no runner
+  only fires while someone has Claude Code open. Fixed by a Windows Scheduled
+  Task that ticks the queue every five minutes, with Instagram's native
+  scheduler as the server-independent path.
+- M12. **Found by the EGM Stage 5 review.** The cache was never invalidated by a
+  write and the digest read through the cache, so the success criteria could
+  pass with no live Instagram call at all. Fixed: writes invalidate the affected
+  cache entries, and the digest always compares against live state.
+- M13. **Found by the EGM Stage 5 review.** `ig_status` promised a quota that
+  instagrapi has no endpoint for, which would have meant printing an invented
+  number. Fixed: it reports "unknown" instead.
+- M14. **Found by the EGM Stage 5 review.** Moving the repo out of the
+  multi-product test repo dropped the one-login rule, which would have left two
+  live Instagram sessions on one account — the exact exposure risk M1 names.
+  Fixed by injecting our sessionid into the vendor daemon, so both servers share
+  one login.
 
 **What would invalidate this spec**
 

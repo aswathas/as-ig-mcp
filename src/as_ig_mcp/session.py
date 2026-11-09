@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import re
 from ctypes import wintypes
 from typing import Any
 
@@ -135,3 +136,39 @@ def clear_session() -> None:
     path = state.session_path()
     if path.exists():
         path.unlink()
+
+
+_SESSIONID_PREFIX = re.compile(r"^(\d+)")
+
+
+def settings_identity(settings: dict[str, Any] | None) -> dict[str, Any]:
+    """Read username, user id and sessionid out of stored instagrapi settings."""
+    if not settings:
+        return {
+            "present": False,
+            "username": None,
+            "user_id": None,
+            "sessionid": None,
+        }
+
+    cookies = settings.get("cookies")
+    authorization = settings.get("authorization_data")
+    cookies = cookies if isinstance(cookies, dict) else {}
+    authorization = authorization if isinstance(authorization, dict) else {}
+
+    sessionid = cookies.get("sessionid") or authorization.get("sessionid")
+
+    user_id = settings.get("user_id")
+    if user_id is None:
+        user_id = cookies.get("ds_user_id") or authorization.get("ds_user_id")
+    if user_id is None and isinstance(sessionid, str):
+        match = _SESSIONID_PREFIX.match(sessionid)
+        if match:
+            user_id = match.group(1)
+
+    return {
+        "present": True,
+        "username": settings.get("username"),
+        "user_id": str(user_id) if user_id is not None else None,
+        "sessionid": sessionid,
+    }

@@ -18,6 +18,10 @@ class DtsgError(RuntimeError):
     """Raised when Instagram does not hand out an fb_dtsg token."""
 
 
+class WriteNotAllowedError(Exception):
+    """Raised when a mutating feature is called without allow_write=True."""
+
+
 def build_client(settings: dict[str, Any]) -> Client:
     """Build a client and apply the stored session settings in place."""
     client = Client()
@@ -40,7 +44,12 @@ def ensure_dtsg(client: Client) -> str:
     return token
 
 
-def call_feature(client: Any, feature: str, **kwargs: Any) -> Any:
+def call_feature(
+    client: Any,
+    feature: str,
+    allow_write: bool = False,
+    **kwargs: Any,
+) -> Any:
     """Call the mapped method for a feature, retrying once on the fallback."""
     try:
         spec = mapping.FEATURE_METHODS[feature]
@@ -48,13 +57,27 @@ def call_feature(client: Any, feature: str, **kwargs: Any) -> Any:
         raise ValueError(f"unknown feature: {feature!r}") from None
 
     method_name = spec["method"]
+    if not spec.get("read_only", False) and not allow_write:
+        raise WriteNotAllowedError(
+            f"Feature {feature!r} maps to mutating method {method_name!r}; write not allowed"
+        )
+
     fallback_name = spec.get("fallback")
     try:
         return getattr(client, method_name)(**kwargs)
     except _RETRY_ERRORS as primary_error:
         if not fallback_name:
             raise
+        if not allow_write and fallback_name in mapping.MUTATING_METHODS:
+            raise WriteNotAllowedError(
+                f"Feature {feature!r} fallback method {fallback_name!r} is mutating; write not allowed"
+            )
         try:
             return getattr(client, fallback_name)(**kwargs)
         except _RETRY_ERRORS as fallback_error:
             raise primary_error from fallback_error
+
+
+def call_write(client: Any, feature: str, **kwargs: Any) -> Any:
+    """Call a feature with allow_write=True."""
+    return call_feature(client, feature, allow_write=True, **kwargs)
