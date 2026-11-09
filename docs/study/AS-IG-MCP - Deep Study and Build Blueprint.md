@@ -135,31 +135,31 @@ Read from the installed package (`aichargelabs_instagram_mcp-0.2.7.dist-info/MET
 
 Legend: read / write / analytics / DM-read / DM-send. "Manual left" = what a user still does by hand.
 
-| Product | Surface | Read | Write | Analytics | DM r/w | Manual left |
-|---|---|---|---|---|---|---|
-| jlbadano/ig-mcp (206★, MIT, push 2026-02-09) | Graph API | posts, insights, conversations, messages | publish_media, send_dm | per-post + account | y/y (Advanced Access) | comments, scheduling |
-| mcpware/instagram-mcp (76★, npm, push 2026-09-13) | Graph API | 23 tools incl. DM read | publish, reply, send DM | yes | y/y | scheduling |
-| subzeroid/instagrapi (7,092★, push 2026-11-09) | private API library | full | full | full | y/y | nothing (library) |
-| taskmaster-ai/insta-mcp (18★, push 2026-08-09) | instagrapi | `read_dms` only | `send_dm` | none | y/y | everything else |
-| rayenking/instagrapi-mcp (1★, created 2026-10-31) | instagrapi | 34 tools | yes | partial | y/y | — |
-| anand-kamble/mcp-instagram (9★, push 2026-11-04) | private API (TS client) | search, 2FA, DMs | yes | — | y/y | — |
-| Stupidoodle/instagram-mcp (3★, push 2026-11-09) | instagrapi + **MQTT push** | DMs realtime | yes | — | y/y | — |
-| inssist/mcp (14★, push 2026-10-19) | browser extension, own session | profiles, DMs, insights | posts/reels/stories with music, schedule | audience reports | y/y | browser must stay open |
-| AleemHaider/instagram-mcp (9★) | Graph API | 24 tools, comments, DMs, insights | publish, comment | yes | y/y | — |
-| adelaidasofia/instagram-mcp (17★) | Graph API | multi-account | publish, comments | yes | — | review gate |
-| IvanBBaev/instagram-mcp (7★) | Graph API | 28 pro-account tools | publish | yes | — | — |
-| HasData/instagram-mcp (12★) | hosted, public data | public profiles/feeds | none | engagement | n/n | everything |
-| Upload-Post MCP (16★, push 2026-11-09) | SaaS | 50 tools / 22 networks, comments | publish, schedule, auto-DMs | yes | y/y | — |
-| Postiz MCP (self-host) | SaaS/self-host | 30+ channels | post/carousel/reel, schedule | yes | n/n | inbox |
-| Mixpost MCP (self-host) | self-host | list accounts/posts | draft/schedule | no | n/n | inbox, comments |
-| Metricool MCP | SaaS | posts/reels/stories, competitors | schedule | strong + best-time | n/n | no inbox tool despite having an Inbox product |
-| Buffer MCP | SaaS | queue, channels | draft/schedule | insights | n/n | no comment reply |
-| Hootsuite MCP | SaaS | Perch metrics, Nest inbox, Lumen listening | Perch publish, Parliament schedule | strong | read via Nest (IG not named) / **no outbound reply** | outbound replies |
-| Blotato MCP (36 tools) | Graph API | comments, conversations, messages, analytics | post/schedule/comment/DM | yes | y/y | — |
-| Inrō MCP (25+ tools) | Meta Business API | conversations, campaigns | DM, folders, automations | funnel | y/y | — |
-| Unipile | private API (user/pw) | inbox, read receipts, attachments | DM send | none | y/y | posts, insights, profile |
-| Ayrshare (docs + action MCP) | SaaS API | posts | publish/schedule | via API | n/n | — |
-| Sprout Social | SaaS (third-party MCP) | Smart Inbox, Trellis | Smart Inbox | strong | read (UI) | — |
+| Product                                           | Surface                        | Read                                         | Write                                    | Analytics          | DM r/w                                               | Manual left                                   |
+| ------------------------------------------------- | ------------------------------ | -------------------------------------------- | ---------------------------------------- | ------------------ | ---------------------------------------------------- | --------------------------------------------- |
+| jlbadano/ig-mcp (206★, MIT, push 2026-02-09)      | Graph API                      | posts, insights, conversations, messages     | publish_media, send_dm                   | per-post + account | y/y (Advanced Access)                                | comments, scheduling                          |
+| mcpware/instagram-mcp (76★, npm, push 2026-09-13) | Graph API                      | 23 tools incl. DM read                       | publish, reply, send DM                  | yes                | y/y                                                  | scheduling                                    |
+| subzeroid/instagrapi (7,092★, push 2026-11-09)    | private API library            | full                                         | full                                     | full               | y/y                                                  | nothing (library)                             |
+| taskmaster-ai/insta-mcp (18★, push 2026-08-09)    | instagrapi                     | `read_dms` only                              | `send_dm`                                | none               | y/y                                                  | everything else                               |
+| rayenking/instagrapi-mcp (1★, created 2026-10-31) | instagrapi                     | 34 tools                                     | yes                                      | partial            | y/y                                                  | —                                             |
+| anand-kamble/mcp-instagram (9★, push 2026-11-04)  | private API (TS client)        | search, 2FA, DMs                             | yes                                      | —                  | y/y                                                  | —                                             |
+| Stupidoodle/instagram-mcp (3★, push 2026-11-09)   | instagrapi + **MQTT push**     | DMs realtime                                 | yes                                      | —                  | y/y                                                  | —                                             |
+| inssist/mcp (14★, push 2026-10-19)                | browser extension, own session | profiles, DMs, insights                      | posts/reels/stories with music, schedule | audience reports   | y/y                                                  | browser must stay open                        |
+| AleemHaider/instagram-mcp (9★)                    | Graph API                      | 24 tools, comments, DMs, insights            | publish, comment                         | yes                | y/y                                                  | —                                             |
+| adelaidasofia/instagram-mcp (17★)                 | Graph API                      | multi-account                                | publish, comments                        | yes                | —                                                    | review gate                                   |
+| IvanBBaev/instagram-mcp (7★)                      | Graph API                      | 28 pro-account tools                         | publish                                  | yes                | —                                                    | —                                             |
+| HasData/instagram-mcp (12★)                       | hosted, public data            | public profiles/feeds                        | none                                     | engagement         | n/n                                                  | everything                                    |
+| Upload-Post MCP (16★, push 2026-11-09)            | SaaS                           | 50 tools / 22 networks, comments             | publish, schedule, auto-DMs              | yes                | y/y                                                  | —                                             |
+| Postiz MCP (self-host)                            | SaaS/self-host                 | 30+ channels                                 | post/carousel/reel, schedule             | yes                | n/n                                                  | inbox                                         |
+| Mixpost MCP (self-host)                           | self-host                      | list accounts/posts                          | draft/schedule                           | no                 | n/n                                                  | inbox, comments                               |
+| Metricool MCP                                     | SaaS                           | posts/reels/stories, competitors             | schedule                                 | strong + best-time | n/n                                                  | no inbox tool despite having an Inbox product |
+| Buffer MCP                                        | SaaS                           | queue, channels                              | draft/schedule                           | insights           | n/n                                                  | no comment reply                              |
+| Hootsuite MCP                                     | SaaS                           | Perch metrics, Nest inbox, Lumen listening   | Perch publish, Parliament schedule       | strong             | read via Nest (IG not named) / **no outbound reply** | outbound replies                              |
+| Blotato MCP (36 tools)                            | Graph API                      | comments, conversations, messages, analytics | post/schedule/comment/DM                 | yes                | y/y                                                  | —                                             |
+| Inrō MCP (25+ tools)                              | Meta Business API              | conversations, campaigns                     | DM, folders, automations                 | funnel             | y/y                                                  | —                                             |
+| Unipile                                           | private API (user/pw)          | inbox, read receipts, attachments            | DM send                                  | none               | y/y                                                  | posts, insights, profile                      |
+| Ayrshare (docs + action MCP)                      | SaaS API                       | posts                                        | publish/schedule                         | via API            | n/n                                                  | —                                             |
+| Sprout Social                                     | SaaS (third-party MCP)         | Smart Inbox, Trellis                         | Smart Inbox                              | strong             | read (UI)                                            | —                                             |
 
 The official MCP registry lists **40+ Instagram servers**, mostly public-data discovery (`co.instavision/instagram-discovery`, `com.52choujiang/instagram-insights`). smithery.ai and mcp.so each surface only a handful.
 
