@@ -37,7 +37,7 @@ paused it)
 | R14 | Stories: own, others, tray, viewers, likers | `ig_feed kind=tray`, `ig_story` | doing — `ig_story` built and returns a clear error without an id; tray and viewers not yet verified live |
 | R15 | Highlights: read and write | `ig_story` reads; `ig_write kind=highlight` writes | todo |
 | R16 | Comments: read, reply, delete, pin, bulk delete, hold, approve | `ig_feed include=comments`; `ig_write kind=comment` | todo |
-| R17 | Insights: media, account, best, compare, demographics | `ig_insight` for each kind | doing — account insights live through `ig_account` (profile visits, follower growth, top posts, stories count); the dedicated `ig_insight` tool is not built yet |
+| R17 | Insights: media, account, best, compare, demographics | `ig_insight` for each kind | green — all six kinds verified live: media, account, best, best_time, compare, demographics; missing fields come back as null with a note, never a number |
 | R18 | Business DM box | `ig_thread box=general` returns threads | todo |
 | R19 | Media download, upload with music, cutout sticker | `ig_feed` and `ig_story` download; `ig_write` publish kinds for upload-with-music and cutout | doing — download is a read, so it belongs to the read tools, not `ig_write` |
 | R20 | Profile edit, category, professional type, AI label | `ig_write kind=profile\|category\|ai_label` | todo |
@@ -45,8 +45,8 @@ paused it)
 | R22 | Collaboration invite, crosspost to Facebook and Threads | `ig_write kind=collaborate\|crosspost` | todo |
 | R23 | Realtime DM push | `ig_digest wait_s=10` returns an event while the socket is alive | todo |
 | R24 | Delta digest — what changed | `ig_digest` twice: first reports changes, second reports none | todo |
-| R25 | Best-time to post | `ig_insight kind=best` with a chosen window and ordering | todo |
-| R26 | Local competitor benchmarking | `ig_person` on another account plus `ig_insight kind=compare` | todo |
+| R25 | Best-time to post | `ig_insight kind=best_time` with a chosen window | green — verified live, computed from our own account insights |
+| R26 | Local competitor benchmarking | `ig_person` on another account plus `ig_insight kind=compare` | doing — compare works on our own posts; the cross-account part is untested |
 
 ## Writes (all behind the confirm gate)
 
@@ -68,7 +68,7 @@ paused it)
 | # | Capability | Check | Status |
 |---|---|---|---|
 | P1 | Health probe | `ig_health` reports every class live | green — 10/10 classes live through our own client |
-| P2 | Session status and relogin | `ig_session status`; relogin needs one emailed code | todo |
+| P2 | Session status and relogin | `ig_session status`; relogin needs one emailed code | doing — status reports the session source; the login and relogin flows are built but not yet run against Instagram (a live run needs one emailed code) |
 | P3 | No relogin after restart | restart the server, read a thread, no code needed | todo |
 | P4 | Caching | second identical read within 90 s does not hit Instagram | todo |
 | P5 | Version pinning | `pyproject.toml` pins `instagrapi==3.2.8` | green — pinned and all 55 method names verified to exist on 3.2.8 |
