@@ -44,7 +44,7 @@ paused it)
 | R21 | Close friends, block, mute, report, remove follower | `ig_write` for each kind | todo |
 | R22 | Collaboration invite, crosspost to Facebook and Threads | `ig_write kind=collaborate\|crosspost` | todo |
 | R23 | Realtime DM push | `ig_digest wait_s=10` returns an event while the socket is alive | todo |
-| R24 | Delta digest — what changed | `ig_digest` twice: first reports changes, second reports none | todo |
+| R24 | Delta digest — what changed | `ig_digest` twice: first reports changes, second reports none | green — verified live: first run reports first_run and writes the markers, second reports nothing changed |
 | R25 | Best-time to post | `ig_insight kind=best_time` with a chosen window | green — verified live, computed from our own account insights |
 | R26 | Local competitor benchmarking | `ig_person` on another account plus `ig_insight kind=compare` | doing — compare works on our own posts; the cross-account part is untested |
 
