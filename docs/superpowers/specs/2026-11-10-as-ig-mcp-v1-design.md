@@ -71,10 +71,14 @@ market covers, plus the ones nobody covers.
 - Scheduling two ways: Instagram's own scheduler (`schedule_at`) for one-off
   posts, and a local queue for drafts and recurring posts.
 - **Capabilities nobody in the market has**: a *what changed* delta digest;
-  per-post insights compared by age; Instagram's own best-post ranking;
+  per-post insights compared by age; Instagram's own best-post ranking wrapped
+  for an agent (Instagram exposes the ranking, nobody exposes it as a tool);
   realtime DM push in a portable MCP (the only competitor uses a Claude Code
   developer channel); a JSONL audit journal of every write attempt; caption and
-  hashtag presets; a first-class best-time tool; local competitor benchmarking.
+  hashtag presets; a first-class best-time tool; local competitor benchmarking
+  of **public** business profiles, read through the same API — reading another
+  account's private data, or scraping a profile the API does not expose, is out
+  of scope.
 - Safety: a 6-digit confirm code with a preview on every write, an idempotency
   key, and the audit journal.
 - Distribution: PyPI package, official MCP registry entry, Claude plugin
@@ -111,11 +115,12 @@ market covers, plus the ones nobody covers.
    for that thread — `ig_inbox` takes an optional `thread_id` so a specific
    thread can be checked; `ig_person` profile equals `ig_status` account info.
 4. A server restart completes a read with **no email code and no re-login**.
-5. Every write without a confirm code returns `needs_confirm` + a preview + the
-   action handle, and performs **no** Instagram mutation — verified by reading
-   the thread afterwards and finding nothing new. The 6-digit code is shown to
-   the account owner and never returned to the agent, so the agent can only
-   complete a write by passing back a code the owner read.
+5. Every write asks the account owner first. `ig_write` shows a yes/no dialog
+   with the exact action; if the human says No, Cancel, or the dialog times out,
+   **no** Instagram mutation happens — verified by reading the thread afterwards
+   and finding nothing new. No approval code exists anywhere: not in the tool
+   result, not in a file, not in the agent's context. Only the human's click
+   approves the write.
 6. `ig_write` with the correct code sends exactly one message; replaying the
    same idempotency key reports "already done" and sends nothing.
 7. `ig_digest` twice in a row: the first reports changes, the second reports
@@ -170,6 +175,16 @@ market covers, plus the ones nobody covers.
 - Secrets: the session cookie is a live credential — DPAPI-encrypted to the
   current Windows user, never in git, never in the transcript.
 
+**Configuration** — environment variables read at call time, all optional:
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `APPDATA` | where the state lives | the Windows user profile |
+| `IG_PLACES_LAT`, `IG_PLACES_LNG` | coordinates for place search | unset — `ig_search kind=place` says so |
+| `AS_IG_REALTIME` | `0` turns the realtime socket off | on |
+| `AS_IG_REALTIME_TIMEOUT` | seconds the approval dialog waits | 300 |
+| `AS_IG_CACHE_TTL` | read cache seconds | 90 |
+
 ## 5. Approach — chosen, with rejected alternatives and why
 
 **Chosen: one local MCP server on instagrapi 3.2.8, private API only, 16
@@ -212,27 +227,39 @@ tools and no `ig_manage`; if `ig_write` ever outgrows the limit, it splits into
 
 ```
 as-ig-mcp/
-  pyproject.toml              # instagrapi==3.2.8, mcp, pycryptodomex (pinned)
+  pyproject.toml              # instagrapi==3.2.8, mcp (pinned); no pycryptodomex
   README.md                   # install, relogin, health check, tool list
   LICENSE                     # MIT
   .claude-plugin/plugin.json  # Claude plugin manifest
   server.json                 # official MCP registry manifest
   src/as_ig_mcp/
     __init__.py
+    __main__.py               # python -m as_ig_mcp
+    cli.py                    # status, health, session import, pending, serve
     server.py                 # stdio MCP server: 16 tools
-    client.py                 # instagrapi wrapper: fb_dtsg prefetch, canonical method per feature
-    mapping.py                # THE table: feature -> canonical instagrapi method
+    client.py                 # instagrapi wrapper: fb_dtsg prefetch, read-only guard, call_write
+    mapping.py                # THE table: feature -> canonical method + read_only
+    serialize.py              # instagrapi objects -> plain JSON
     session.py                # DPAPI load/save, relogin
-    cache.py                  # TTL cache on disk, fresh= bypass
+    state.py                  # paths under %APPDATA%\as-ig-mcp, SQLite state
+    cache.py                  # TTL cache in SQLite, fresh= bypass
     digest.py                 # last-seen markers, change detection
     realtime.py               # socket thread, direct_subscribe, ping watchdog
     events.py                 # events.jsonl, tail with cursor + timeout
     queue.py                  # local publish queue, recurrence, native schedule
     presets.py                # caption / hashtag / first-comment presets
-    writes.py                 # write kinds, confirm gate, idempotency
+    writes.py                 # write kinds, approval dialog, idempotency
     audit.py                  # audit.jsonl journal
-    health.py                 # endpoint-class probe
-    state.py                  # paths under %APPDATA%\as-ig-mcp
+    tools_status.py           # ig_status
+    tools_health.py           # ig_health
+    tools_session.py          # ig_session
+    tools_people.py           # ig_person, ig_people
+    tools_discovery.py        # ig_search
+    tools_feed.py             # ig_feed
+    tools_threads.py          # ig_thread
+    tools_inbox.py            # ig_inbox
+    tools_story.py            # ig_story
+    tools_account.py          # ig_account
   tests/                      # offline tests, no Instagram calls
 ```
 
@@ -255,23 +282,40 @@ as-ig-mcp/
    agent calls.** `ig_write` is the direct path; `ig_thread` (mark seen, react,
    unsend, mute, hide, title, group members) and `ig_account` (professional
    settings, category, AI label) delegate to it rather than mutating on their
-   own. The first call stores the pending action, shows the account owner a
-   6-digit code in a Windows popup (MessageBox through `ctypes`), and returns
-   **the action handle and the preview, never the code** — the agent cannot
-   approve on the account owner's behalf. The owner reads the code, types it in
-   chat, and the agent passes it back as `confirm=`. The second call with the
-   matching code executes once; an idempotency key makes a repeat a no-op. Every
-   attempt is journalled to `audit.jsonl`. When no interactive desktop is
-   available, the owner approves from a terminal instead:
-   `python -m as_ig_mcp approve <handle>` prints the code in that terminal.
-   The code is never written to a file the agent can read — a readable file
-   would give the agent the approval it is supposed to be asking for.
-7. **Scheduled work is confirmed at enqueue time.** `ig_queue` and Instagram's
-   native `schedule_at` both take the confirm code when the item is queued; the
-   item carries that approval with it, and the five-minute runner publishes an
-   already-approved item rather than creating a new one. The rule "no mutation
-   without a confirm code" therefore holds for scheduled posts too — the code is
-   spent once, by the human, at the moment they queue the post.
+   own.
+
+   **The human approves by clicking, not by typing a code.** `ig_write` builds a
+   one-line preview of the exact action, shows the account owner a Windows
+   yes/no dialog (MessageBox through `ctypes`, on its own thread) with that
+   preview, and waits. Yes = the write happens. No, Cancel, or a five-minute
+   timeout = nothing happens. There is no code anywhere: none in the tool
+   result, none in the agent's context, none in a file. The agent cannot relay
+   an approval it does not have, because the approval is a click on the owner's
+   screen that the agent never sees.
+
+   The tool returns the result of the write, or `{"ok": False, "denied": true,
+   "preview": ...}` when the human declined. Every attempt is journalled to
+   `audit.jsonl` with the state: requested, approved, denied, timeout, failed.
+
+   On a machine with no interactive desktop session there is no way to ask a
+   human, so the write is refused with a clear message. A write needs a person
+   at the keyboard; that is the price of not letting the agent approve itself.
+
+   Claude Code's own permission prompt is used as a second, coarser gate: the
+   `ig_write` tool declares `_meta["anthropic/requiresUserInteraction"]`, so
+   the harness also asks before the call runs. The dialog is the fine-grained
+   check — it shows what will actually happen.
+
+   `ig_write` also carries the standard tool annotations: `readOnlyHint=false`,
+   `destructiveHint` per kind, `idempotentHint` true for kinds that accept an
+   idempotency key, `openWorldHint=true`.
+7. **Scheduled work is approved at enqueue time.** `ig_queue` and Instagram's
+   native `schedule_at` are writes, so they go through the same dialog: the
+   owner approves the queued post once, when they queue it, and the item
+   carries that approval. The five-minute runner publishes an already-approved
+   item rather than creating a new one. The rule "no mutation without the
+   owner's approval" therefore holds for scheduled posts too — the approval is
+   given once, by the human, at the moment they queue the post.
 8. Any write clears the cache entries it touched (`cache.invalidate_prefix`), and
    the digest compares against live state, never against the cache — otherwise
    a digest could report "nothing changed" from stale cached reads.
@@ -280,24 +324,34 @@ as-ig-mcp/
    failed response is reported to the owner and not retried by us, because
    Instagram may have accepted it before the response failed to parse. One
    attempt, one outcome, and the audit journal records which.
-9. `ig_health` calls one representative method per endpoint class (REST
-   profile, GraphQL feed, GraphQL followers, GraphQL threads, GraphQL search,
-   GraphQL stories, DM read, DM write preview, insights, business DM box,
-   notifications, realtime socket) and reports live or dead, naming the remedy
-   when dead.
+10. `ig_health` calls one representative method per endpoint class (REST
+    profile, GraphQL feed, GraphQL followers, GraphQL threads, GraphQL search,
+    GraphQL stories, DM read, DM write preview, insights, business DM box,
+    notifications, realtime socket) and reports live or dead, naming the remedy
+    when dead.
+11. **State lives in one SQLite file, not loose JSON.** `cache.json`,
+    `digest.json` and `queue.json` become tables in `%APPDATA%\as-ig-mcp\state.db`,
+    so the MCP server, the queue runner and a second Claude Code session can
+    write at the same time without one clobbering the other's work. Loose JSON
+    with a whole-file rewrite meant the last writer silently discarded the
+    rest of the cache — and the 90-second cache is the main defence against an
+    account block. SQLite is in the standard library, so this costs no
+    dependency.
 
 **State**
 
 - Session: `%APPDATA%\as-ig-mcp\session.enc` (DPAPI, current Windows user).
-- Cache: `cache.json` (TTL entries, atomic write).
-- Digest markers: `digest.json`.
+- Cache, digest markers and the publish queue: tables in
+  `%APPDATA%\as-ig-mcp\state.db` (SQLite, stdlib), so several processes can write
+  at once without clobbering each other.
 - Reply style: `%APPDATA%\as-ig-mcp\style.json` — one object per contact or
   account holding `relationship`, `language`, `formality`, `personality_notes`,
   `topics` and `response_style`. `ig_inbox suggest=true` uses it to draft a
   reply. It is local memory, not Instagram data.
 - Realtime events: `events.jsonl` (append-only, with a cursor).
 - Audit journal: `audit.jsonl` (append-only, every write attempt).
-- Queue: `queue.json` (scheduled and recurring posts).
+- There is no pending-approval store: a write is approved in one call, so there
+  is nothing to keep between calls.
 - Presets: `presets.json` (caption, hashtag and first-comment templates).
 - Pending write confirmations: in-memory only, lost on restart = safe.
 
@@ -305,7 +359,7 @@ as-ig-mcp/
 
 | Tool | Capabilities |
 |---|---|
-| `ig_status` | session state, account, quota, cache state, realtime state, one-line health |
+| `ig_status` | session state, account details, cache state, realtime state, one-line health. It reports **no quota**: instagrapi has no quota endpoint, so any number would be invented. |
 | `ig_inbox` | threads awaiting a reply, last message, optional suggested reply from our style file |
 | `ig_thread` | thread messages (paginated), presence, and read-only thread detail. Mutating thread actions (mark seen, react, unsend, mute, hide, title, group members) are **not** its own; they are `ig_write` kinds and `ig_thread` only points at them. |
 | `ig_person` | profile with `include=` followers, following, posts, stories, highlights, comments, suggestions, about |
@@ -319,7 +373,7 @@ as-ig-mcp/
 | `ig_queue` | list, schedule, cancel, recurring posts, native Instagram schedule. The local queue needs a runner: a Windows Scheduled Task that runs `python -m as_ig_mcp queue tick` every five minutes, installed once by the user. Instagram's own `schedule_at` stays the server-independent path, so a scheduled post survives our machine being off. |
 | `ig_preset` | caption, hashtag and first-comment presets — local, product-only everywhere else |
 | `ig_health` | live/dead per endpoint class, with the remedy named |
-| `ig_session` | status, relogin with the emailed code, cache clear, export, linked accounts. Relogin is `python -m as_ig_mcp session relogin`, which prints a prompt for the 6-digit code and then rewrites `session.enc`. |
+| `ig_session` | status, relogin with the emailed code, cache clear, and `export` — the session settings as JSON with `sessionid` and `csrftoken` replaced by `"<redacted>"`, so the owner can back it up without the tool leaking a live cookie. Relogin is `python -m as_ig_mcp session relogin`, which prompts for the emailed code and then rewrites `session.enc`. |
 | `ig_account` | account insights units, linked accounts (Instagram's own account switcher — accounts linked to this login), and the professional settings that `ig_write` can change |
 
 **Write kinds behind `ig_write`** — `send_message`, `send_media`, `send_voice`,
@@ -396,22 +450,23 @@ mapping entry is one line, but they are verified by unit test only: the method
 exists and is callable with the documented arguments. No live call is made for
 them.
 
-**Realtime** — one daemon thread per server run. It runs only when the flag
-`AS_IG_REALTIME=1` is set in the environment of the MCP server process;
-without it, `ig_digest` polls and everything else behaves identically. On the
-main thread `rt.direct_subscribe()` runs once (it reads `seq_id` and
-`snapshot_at_ms` from `client.direct_threads()` and subscribes to the
-message-sync stream — without it the socket connects and no message ever
-arrives). The thread loops `realtime_read_once()`, pings every 15 seconds
-(MQTT is the message protocol Instagram speaks on this socket, and its
-keep-alive is 20 seconds), and reconnects with backoff because instagrapi has
-no reconnect logic. Events (`receive`, `message`, `thread_update`, `iris`,
+**Realtime** — one daemon thread per server run. It is **on by default**; set
+`AS_IG_REALTIME=0` to turn it off, in which case `ig_digest` polls and
+everything else behaves identically. On the main thread `rt.direct_subscribe()`
+runs once (it reads `seq_id` and `snapshot_at_ms` from `client.direct_threads()`
+and subscribes to the message-sync stream — without it the socket connects and
+no message ever arrives). The thread loops `realtime_read_once()`, pings every
+15 seconds (MQTT is the message protocol Instagram speaks on this socket, and
+its keep-alive is 20 seconds), and reconnects with backoff because instagrapi
+has no reconnect logic. Events (`receive`, `message`, `thread_update`, `iris`,
 `direct`, `typing`, `seen`, `presence`) are normalised to
 `{"ts","event","thread_id","value"}` and appended to `events.jsonl`. `iris` is
 Instagram's name for the non-thread part of the realtime payload. There is
 **no** reaction event — reactions arrive as message patches and are classified
 by us. FBNS (Facebook's separate push-notification channel, different host and
-device authentication) is skipped. Sending stays on the HTTP path.
+device authentication) is skipped. Sending stays on the HTTP path. The socket
+belongs to one account and one process; a second Claude Code session opens its
+own socket, and every event carries the account it came from.
 
 **One login, two servers.** The vendor daemon keeps running as a fallback, and
 both servers use the same Instagram login: our `sessionid` is injected into the
@@ -431,7 +486,8 @@ reply-style store.
 | Realtime socket dies or Instagram closes it | reader thread raises, or `ig_health` socket probe fails | realtime state shows disconnected | reconnect with backoff; fall back to polling |
 | Realtime payload shape changes | unknown event kind | event recorded as `unknown` with the raw payload | keep serving; the digest still works |
 | Rate limited | HTTP 429 | status and retry-after | backoff, then report |
-| Write called without or with a wrong confirm code | confirm check | `needs_confirm` + preview + action handle, no mutation; the code itself goes to the owner, not the agent | nothing sent; a wrong code is refused |
+| Write called and the human says No, Cancel, or the dialog times out | the dialog's return value | the tool returns `{"ok": False, "denied": true, "preview": ...}` | nothing is sent; the attempt is journalled as denied |
+| Write called on a machine with no interactive desktop | the dialog call fails | "no interactive desktop — a write needs a person at the keyboard" | nothing is sent; the attempt is journalled as failed |
 | A write's response fails to parse | the exception after a POST | "the request may have gone through — check before retrying" | never retried automatically, never fallen back to another method; the owner decides |
 | Same write submitted twice | idempotency key | "already done" | no second message, no second post |
 | Queue item fires while the machine is asleep | item overdue at next start | "2 items were overdue" | publishes late, marks them, and tells the user |
@@ -455,11 +511,11 @@ No write is auto-retried after a partial failure. The operator decides.
    `ig_person` profile == `ig_status` account info.
 4. **Persistence test**: stop the server, start it again, read a thread — no
    email code.
-5. **Write-gate test**: `ig_write kind=send_message` without confirm →
-   `needs_confirm` + preview + handle, and the tool result contains no 6-digit
-   code; read the thread → no new message; the account owner reads the code
-   from the popup, states it, and the agent passes it as `confirm` → exactly
-   one message; replay the same idempotency key → "already done".
+5. **Write-gate test**: `ig_write kind=send_message` → a yes/no dialog appears
+   with the preview; the human answers No → the tool returns `denied` and the
+   thread is unchanged; the human answers Yes → exactly one message appears;
+   replaying the same idempotency key → "already done" and no second message.
+   The dialog is faked in the test, so no test ever touches the real desktop.
 6. **Audit test**: `audit.jsonl` contains the rejected attempt, the approved
    attempt, and the target thread id.
 7. **Digest test**: `ig_digest` twice → the second reports no changes.
@@ -481,7 +537,11 @@ write attempt is journalled.
 
 ## 9. Implementation ownership — agent implements + build order
 
-Agent implements. Each phase ends with a runnable check.
+Agent implements. Each phase ends with a runnable check. The loop itself —
+which worker takes a phase, how the orchestrator verifies it, who commits, and
+when a review runs — is `docs/reviews/loop.md`. Two rules matter most here:
+the orchestrator runs the phase check itself and never accepts a worker's claim
+as evidence, and workers never commit.
 
 | Phase | Build | Check |
 |---|---|---|
@@ -543,9 +603,13 @@ Agent implements. Each phase ends with a runnable check.
   invite, crosspost, category conversion, professional type, AI label) stay in
   the mapping but are verified by unit test only — no live call, no live
   account mutation.
-- D7. The confirm code is shown to the account owner in a Windows popup, never
-  returned to the agent. The agent receives the action handle and the preview
-  and asks the owner for the code.
+- D7. The human approves by clicking, not by typing a code. `ig_write` shows a
+  yes/no dialog with the exact action and waits; Yes executes it, No, Cancel or
+  a five-minute timeout does not. No approval code exists in the tool result, in
+  a file, or in the agent's context, so the agent cannot relay an approval it
+  does not have. The harness's own permission prompt is a second, coarser gate.
+  On a machine with no interactive desktop, writes are refused rather than
+  approved by the agent.
 - D8. The local publish queue is ticked by a Windows Scheduled Task every five
   minutes; Instagram's native `schedule_at` is the server-independent path.
 
@@ -586,10 +650,33 @@ Agent implements. Each phase ends with a runnable check.
   mapping entry plus the `allow_write` guard in `client.call_feature`, so a read
   path cannot mutate anything. This is the failure mode most likely to bite an
   agent that trusts method names.
-- M10. **Found by the EGM Stage 5 review.** A confirm code returned in the tool
-  result proves a two-step flow, not human consent, because the same agent
-  receives the code. Fixed by showing the code to the account owner in a Windows
-  popup and returning only the action handle to the agent.
+- M10. **Found by the EGM Stage 5 review, then sharpened by Stage 8.** A confirm
+  code returned in the tool result proves a two-step flow, not human consent,
+  because the same agent receives the code — and the owner typing the code into
+  chat puts it in the agent's context anyway. There is no code now: the
+  account owner approves by clicking Yes in a dialog that shows the exact
+  action, and the write happens only if they do. The agent never holds an
+  approval.
+- M15. **Found by the EGM Stage 8 review.** Loose JSON state meant the last
+  writer clobbered the whole cache, which silently disabled the 90-second
+  cache — the main defence against an account block. State moved to one
+  SQLite file (standard library), so the MCP server, the queue runner and a
+  second session can write at once.
+- M16. **Found by the EGM Stage 8 review.** The modal approval dialog blocked
+  the calling thread, and the documented fallback let the agent fetch the code
+  itself. Fixed: the dialog runs on its own thread with a five-minute timeout,
+  and the CLI fallback is gone — on a machine with no desktop, writes are
+  refused rather than approved by the agent.
+- M17. **Accepted, not fixed.** The v1 scope is market parity — every
+  capability the whole market covers, plus the white space — and it includes
+  public distribution. The reviews flagged this repeatedly as more than one
+  user and one account need. The owner chose the superset on purpose, so this
+  stands as a decision, with the cost named: a larger surface, a longer
+  build, and a private-API client that needs maintenance.
+- M18. **Accepted.** Realtime ships on by default (`AS_IG_REALTIME=0` turns it
+  off) so the acceptance criteria can actually be met by the documented install
+  command, and the polling digest stays as the fallback when the socket is
+  down.
 - M11. **Found by the EGM Stage 5 review.** A local publish queue with no runner
   only fires while someone has Claude Code open. Fixed by a Windows Scheduled
   Task that ticks the queue every five minutes, with Instagram's native
