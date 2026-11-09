@@ -17,7 +17,15 @@ try:
 except Exception:  # pragma: no cover - mcp always ships this
     PROTOCOL_VERSION = "2025-06-18"
 
-EXPECTED_TOOLS = {"ig_status", "ig_health", "ig_session"}
+EXPECTED_TOOLS = {
+    "ig_status",
+    "ig_health",
+    "ig_session",
+    "ig_person",
+    "ig_people",
+    "ig_search",
+    "ig_feed",
+}
 
 
 def _send(proc: subprocess.Popen, payload: dict[str, Any]) -> None:

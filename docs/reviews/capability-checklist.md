@@ -21,18 +21,18 @@ paused it)
 
 | # | Capability | Check | Status |
 |---|---|---|---|
-| R1 | Profile, own and other | `ig_person username=this_aswath` returns bio and counts | todo |
-| R2 | Feed, reels, tagged, saved, collections | `ig_feed` for each kind returns a non-empty list | todo |
-| R3 | Followers, following, suggestions | `ig_people` for each kind returns a non-empty list | todo |
+| R1 | Profile, own and other | `ig_person username=this_aswath` returns bio and counts | green — verified live 2026-11-10: Aswath AS, 244 followers, 44 following, 67 media, business |
+| R2 | Feed, reels, tagged, saved, collections | `ig_feed` for each kind returns a non-empty list | doing — posts, reels, saved, collections verified live; tagged, archive, liked, tray, guides pending |
+| R3 | Followers, following, suggestions | `ig_people` for each kind returns a non-empty list | doing — followers and following verified live; suggestions and requests pending |
 | R4 | Follow requests, approve and decline | `ig_people kind=requests` lists or states none | todo |
 | R5 | DM thread list and message bodies | `ig_thread` on the known thread returns 4 messages | todo |
 | R6 | DM search | `ig_search kind=message` finds a known word | todo |
 | R7 | Message requests and spam inbox | `ig_thread kind=requests` and `kind=spam` | todo |
 | R8 | Group threads | `ig_thread kind=group` | todo |
 | R9 | Presence | `ig_thread` reports presence for a thread | todo |
-| R10 | Notifications | `ig_feed kind=notifications` returns likes, comments, followers, tagged | todo |
+| R10 | Notifications | `ig_feed kind=notifications` returns likes, comments, followers, tagged | green — verified live, 12 activity items |
 | R11 | Mentions, inbox notes, on-post notes | `ig_feed` and `ig_write kind=note` | todo |
-| R12 | Hashtags: info, top, recent, following | `ig_search kind=hashtag`; `ig_write kind=follow_hashtag` | todo |
+| R12 | Hashtags: info, top, recent, following | `ig_search kind=hashtag`; `ig_write kind=follow_hashtag` | doing — search verified live; following is a write, pending the gate |
 | R13 | Places, music, top search | `ig_search` for each kind | todo |
 | R14 | Stories: own, others, tray, viewers, likers | `ig_feed kind=tray`, `ig_story` | todo |
 | R15 | Highlights: read and write | `ig_story` reads; `ig_write kind=highlight` writes | todo |
@@ -67,11 +67,11 @@ paused it)
 
 | # | Capability | Check | Status |
 |---|---|---|---|
-| P1 | Health probe | `ig_health` reports every class live | todo |
+| P1 | Health probe | `ig_health` reports every class live | green — 10/10 classes live through our own client |
 | P2 | Session status and relogin | `ig_session status`; relogin needs one emailed code | todo |
 | P3 | No relogin after restart | restart the server, read a thread, no code needed | todo |
 | P4 | Caching | second identical read within 90 s does not hit Instagram | todo |
-| P5 | Version pinning | `pyproject.toml` pins `instagrapi==3.2.8` | todo |
+| P5 | Version pinning | `pyproject.toml` pins `instagrapi==3.2.8` | green — pinned and all 55 method names verified to exist on 3.2.8 |
 | P6 | Presets | `ig_preset` stores and returns a caption and hashtag set | todo |
 | P7 | Plugin manifest valid | `claude plugin validate --strict` prints validation passed | todo |
 | P8 | PyPI build | the package builds and installs from the built artifact | todo |

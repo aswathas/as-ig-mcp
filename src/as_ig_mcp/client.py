@@ -7,7 +7,7 @@ from typing import Any
 from instagrapi import Client
 from instagrapi.exceptions import ClientError, ClientGraphqlError, ClientJSONDecodeError
 
-from . import mapping
+from . import mapping, session
 
 DTSG_ATTRIBUTE = "_asig_dtsg"
 
@@ -20,6 +20,10 @@ class DtsgError(RuntimeError):
 
 class WriteNotAllowedError(Exception):
     """Raised when a mutating feature is called without allow_write=True."""
+
+
+class SessionMissingError(RuntimeError):
+    """Raised when a tool needs a stored session and there is none."""
 
 
 def build_client(settings: dict[str, Any]) -> Client:
@@ -81,3 +85,48 @@ def call_feature(
 def call_write(client: Any, feature: str, **kwargs: Any) -> Any:
     """Call a feature with allow_write=True."""
     return call_feature(client, feature, allow_write=True, **kwargs)
+
+
+def field_value(obj: Any, name: str) -> Any:
+    """Read ``name`` from a dict or an object, returning ``None`` when absent."""
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
+
+
+def split_page(result: Any) -> tuple[list[Any], Any]:
+    """Split a ``(items, cursor)`` page result; a bare list has no cursor."""
+    if isinstance(result, tuple) and len(result) == 2:
+        items, cursor = result
+        return list(items or []), cursor
+    return list(result or []), None
+
+
+def open_client() -> tuple[Any, dict[str, Any]]:
+    """Load the stored session and build a client for a read tool."""
+    settings = session.load_session()
+    if not settings:
+        raise SessionMissingError("no session; import a session first")
+    return build_client(settings), settings
+
+
+def resolve_user_id(
+    instagram: Any,
+    username: str | None = None,
+    user_id: Any = None,
+    settings: dict[str, Any] | None = None,
+) -> str:
+    """Resolve an account to a user id: explicit id, then username, then self."""
+    if user_id not in (None, ""):
+        return str(user_id)
+    if username:
+        handle = str(username).strip().lstrip("@")
+        user = call_feature(instagram, "user_by_username", username=handle)
+        pk = field_value(user, "pk")
+        if pk is None:
+            raise ValueError(f"no account found for username {handle!r}")
+        return str(pk)
+    identity = session.settings_identity(settings or {})
+    if identity["user_id"]:
+        return str(identity["user_id"])
+    raise SessionMissingError("the session has no user id; pass username or user_id")

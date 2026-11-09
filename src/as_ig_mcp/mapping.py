@@ -62,8 +62,22 @@ MUTATING_METHODS: frozenset[str] = frozenset(
 FEATURE_METHODS: dict[str, dict] = {
     # Profile and relationships
     "profile": _entry("user_info_v1", "rest", "Profile details, bio and counts for one user."),
+    "user_by_username": _entry(
+        "user_info_by_username", "rest", "Profile evaluated from an exact username."
+    ),
+    "about": _entry("user_about_v1", "rest", "About-this-account country, date and former names."),
+    "guides": _entry("user_guides_v1", "rest", "Guides created by a user."),
     "followers": _entry("user_followers_v1", "rest", "Followers of a user, paginated."),
     "following": _entry("user_following_v1", "rest", "Accounts a user follows, paginated."),
+    "followers_page": _entry(
+        "user_followers_v1_chunk", "rest", "One page of followers plus its cursor."
+    ),
+    "following_page": _entry(
+        "user_following_v1_chunk", "rest", "One page of following plus its cursor."
+    ),
+    "requests_page": _entry(
+        "user_follow_requests_chunk", "rest", "One page of follow requests plus its cursor."
+    ),
     "follow": _entry("user_follow", "rest", "Follow an account.", read_only=False),
     "unfollow": _entry("user_unfollow", "rest", "Unfollow an account.", read_only=False),
     "block": _entry("user_block", "rest", "Block an account.", read_only=False),
@@ -109,6 +123,21 @@ FEATURE_METHODS: dict[str, dict] = {
     "posts": _entry(
         "user_medias_v1", "rest", "A user's posts, paginated.", fallback="user_medias_gql"
     ),
+    "posts_page": _entry(
+        "user_medias_paginated_v1", "rest", "One page of a user's posts plus its cursor."
+    ),
+    "reels": _entry("user_clips", "rest", "A user's reels."),
+    "reels_page": _entry(
+        "user_clips_paginated_v1", "rest", "One page of a user's reels plus its cursor."
+    ),
+    "tagged": _entry("usertag_medias", "rest", "Media where a user is tagged."),
+    "tagged_page": _entry(
+        "usertag_medias_paginated", "rest", "One page of tagged media plus its cursor."
+    ),
+    "saved_collections": _entry("collections", "rest", "Saved collections with media counts."),
+    "saved_media": _entry("collection_medias", "rest", "Media inside a saved collection."),
+    "liked": _entry("liked_medias", "rest", "Media the account has liked."),
+    "archived": _entry("archive_medias", "rest", "The account's archived media."),
     "comments": _entry("media_comments", "rest", "Comments on a media item."),
     "comment_reply": _entry("media_comment", "rest", "Post a comment or reply.", read_only=False),
     "comment_bulk_delete": _entry("comment_bulk_delete", "rest", "Delete several comments at once.", read_only=False),
@@ -148,8 +177,14 @@ MUTATING_FEATURES: frozenset[str] = frozenset(
 FEATURES_BY_AREA: dict[str, list[str]] = {
     "profile": [
         "profile",
+        "user_by_username",
+        "about",
+        "guides",
         "followers",
         "following",
+        "followers_page",
+        "following_page",
+        "requests_page",
         "follow",
         "unfollow",
         "block",
@@ -216,6 +251,15 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
     ],
     "media": [
         "posts",
+        "posts_page",
+        "reels",
+        "reels_page",
+        "tagged",
+        "tagged_page",
+        "saved_collections",
+        "saved_media",
+        "liked",
+        "archived",
         "media_download",
         "save_media",
     ],
