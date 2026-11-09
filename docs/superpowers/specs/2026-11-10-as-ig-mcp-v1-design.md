@@ -20,10 +20,13 @@ aichargelabs 0.2.7) fails 13 of its read tools with
 vendor binary bundles instagrapi **3.2.3**, whose `fetch_fb_dtsg()` scrapes
 `www.instagram.com/graphql/query/...` — a JSON response with no `__eqmc`
 block — so the token is always `None` and Instagram refuses every modern web
-endpoint. instagrapi **3.2.8** scrapes the homepage HTML instead, returns a
+endpoint. `__eqmc` is the marker in Instagram's web page HTML that carries the
+Facebook CSRF token (`fb_dtsg`); it exists in the page, never in a JSON
+response. instagrapi **3.2.8** scrapes the homepage HTML instead, returns a
 real token, and every dead endpoint works on the same session cookies. The
-vendor binary cannot be patched: modules sit inside the exe PYZ and `iglib` is
-pyarmor-obfuscated.
+vendor binary cannot be patched: its modules sit inside the exe archive, and
+`iglib` — the vendor's own wrapper layer around instagrapi, protected by
+pyarmor code obfuscation — cannot be edited either.
 
 Measured, same account, same session:
 
@@ -46,9 +49,13 @@ market covers, plus the ones nobody covers.
 
 **In (v1)**
 
-- 16 tools covering roughly 40 capabilities — a superset of every Instagram MCP
-  server and every commercial tool's Instagram surface, minus what is
-  structurally impossible for a local single-user tool.
+- 16 tools covering the capabilities listed in the acceptance list,
+  `docs/reviews/capability-checklist.md` (37 rows, one row per capability, each
+  with a check) — a superset of every Instagram MCP server and every commercial
+  tool's Instagram surface, minus what is structurally impossible for a local
+  single-user tool. The market comparison behind that claim is
+  `docs/study/AS-IG-MCP - Capability Matrix.md` (and the same note in the
+  Obsidian vault).
 - Every read the market has: profile, feed, reels, tagged, saved, collections,
   followers, following, suggestions, follow requests, DM threads and messages,
   message requests, spam box, group threads, presence, notifications, mentions,
@@ -101,7 +108,8 @@ market covers, plus the ones nobody covers.
 2. Read counts are **> 0 and stable across two consecutive calls** (never
    pinned to a number — Instagram counts move).
 3. `ig_thread` last message for a known thread equals `ig_inbox` last message
-   for that thread; `ig_person` profile equals `ig_status` account info.
+   for that thread — `ig_inbox` takes an optional `thread_id` so a specific
+   thread can be checked; `ig_person` profile equals `ig_status` account info.
 4. A server restart completes a read with **no email code and no re-login**.
 5. Every write without a confirm code returns `needs_confirm` + preview + a
    6-digit code and performs **no** Instagram mutation — verified by reading the
@@ -153,7 +161,8 @@ market covers, plus the ones nobody covers.
   log, audit journal, queue, presets.
 - Instagram limits: rate limits, checkpoint challenges, and the 24-hour reply
   window of the official API (which does not apply to our private-API path).
-  Reads are throttled by instagrapi's delay range and cut further by the cache.
+  Reads are throttled by instagrapi's per-request delay range, which we set to
+  one to three seconds, and cut further by the 90-second cache.
 - Repo: `C:\Users\aswat\Projects\as-ig-mcp` (git, local). The multi-MCP test
   repo `everyhand-tests` stays untouched.
 - Secrets: the session cookie is a live credential — DPAPI-encrypted to the
@@ -191,9 +200,11 @@ the socket is for reading events only.
 Chrome, breaks when Instagram changes a button, and cannot produce clean data.
 
 **Rejected: one mega tool with a single `action` parameter.** Tool search
-matches on names and descriptions; a mega tool makes matching worse. Where a
-tool grows past the 4,096-character description limit, split it — `ig_write`
-and `ig_manage` — rather than letting one grow.
+matches on names and descriptions; a mega tool makes matching worse. Claude
+Code cuts a server's upfront tool descriptions at 4,096 characters, so a tool
+whose description grows past that would stop being discoverable. v1 ships 16
+tools and no `ig_manage`; if `ig_write` ever outgrows the limit, it splits into
+`ig_write` and `ig_manage` then.
 
 ## 6. Architecture, components & data flow
 
@@ -238,19 +249,29 @@ as-ig-mcp/
 4. Reads pass through `cache.py` (default TTL 90 seconds, `fresh=true` bypasses).
 5. `ig_digest` compares current state against `digest.json` and rewrites the
    markers; with `wait_s` it also long-polls the realtime queue.
-6. Writes pass through `writes.py`: the first call stores the pending action,
-   shows the account owner a 6-digit code in a Windows popup (MessageBox through
-   `ctypes`), and returns **the action handle and the preview, never the code**
-   — the agent cannot approve on the account owner's behalf. The owner reads the
-   code, types it in chat, and the agent passes it back as `confirm=`. The
-   second call with the matching code executes once; an idempotency key makes a
-   repeat a no-op. Every attempt is journalled to `audit.jsonl`. When no
-   interactive desktop is available, the fallback is a file the owner opens
+6. **Every mutation on the account goes through `writes.py`, whatever tool the
+   agent calls.** `ig_write` is the direct path; `ig_thread` (mark seen, react,
+   unsend, mute, hide, title, group members) and `ig_account` (professional
+   settings, category, AI label) delegate to it rather than mutating on their
+   own. The first call stores the pending action, shows the account owner a
+   6-digit code in a Windows popup (MessageBox through `ctypes`), and returns
+   **the action handle and the preview, never the code** — the agent cannot
+   approve on the account owner's behalf. The owner reads the code, types it in
+   chat, and the agent passes it back as `confirm=`. The second call with the
+   matching code executes once; an idempotency key makes a repeat a no-op. Every
+   attempt is journalled to `audit.jsonl`. When no interactive desktop is
+   available, the fallback is a file the owner opens
    (`%APPDATA%\as-ig-mcp\pending.txt`), and the tool says so plainly.
-7. Any write clears the cache entries it touched (`cache.invalidate_prefix`), and
+7. **Scheduled work is confirmed at enqueue time.** `ig_queue` and Instagram's
+   native `schedule_at` both take the confirm code when the item is queued; the
+   item carries that approval with it, and the five-minute runner publishes an
+   already-approved item rather than creating a new one. The rule "no mutation
+   without a confirm code" therefore holds for scheduled posts too — the code is
+   spent once, by the human, at the moment they queue the post.
+8. Any write clears the cache entries it touched (`cache.invalidate_prefix`), and
    the digest compares against live state, never against the cache — otherwise
    a digest could report "nothing changed" from stale cached reads.
-7. `ig_health` calls one representative method per endpoint class (REST
+9. `ig_health` calls one representative method per endpoint class (REST
    profile, GraphQL feed, GraphQL followers, GraphQL threads, GraphQL search,
    GraphQL stories, DM read, DM write preview, insights, business DM box,
    notifications, realtime socket) and reports live or dead, naming the remedy
@@ -261,6 +282,10 @@ as-ig-mcp/
 - Session: `%APPDATA%\as-ig-mcp\session.enc` (DPAPI, current Windows user).
 - Cache: `cache.json` (TTL entries, atomic write).
 - Digest markers: `digest.json`.
+- Reply style: `%APPDATA%\as-ig-mcp\style.json` — one object per contact or
+  account holding `relationship`, `language`, `formality`, `personality_notes`,
+  `topics` and `response_style`. `ig_inbox suggest=true` uses it to draft a
+  reply. It is local memory, not Instagram data.
 - Realtime events: `events.jsonl` (append-only, with a cursor).
 - Audit journal: `audit.jsonl` (append-only, every write attempt).
 - Queue: `queue.json` (scheduled and recurring posts).
@@ -273,20 +298,20 @@ as-ig-mcp/
 |---|---|
 | `ig_status` | session state, account, quota, cache state, realtime state, one-line health |
 | `ig_inbox` | threads awaiting a reply, last message, optional suggested reply from our style file |
-| `ig_thread` | thread messages (paginated), presence, per-thread actions (mark seen, react, unsend, mute, hide, title, group members) |
+| `ig_thread` | thread messages (paginated), presence, and read-only thread detail. Mutating thread actions (mark seen, react, unsend, mute, hide, title, group members) are **not** its own; they are `ig_write` kinds and `ig_thread` only points at them. |
 | `ig_person` | profile with `include=` followers, following, posts, stories, highlights, comments, suggestions, about |
-| `ig_people` | followers, following, suggestions, follow requests (approve/decline) — paginated |
+| `ig_people` | followers, following, suggestions, follow requests (approve/decline) — paginated. Approving a follow request is a write and goes through `ig_write`. |
 | `ig_search` | `kind=user\|hashtag\|place\|music\|post\|message\|account` |
 | `ig_feed` | `kind=posts\|reels\|tagged\|saved\|archive\|notifications\|collections\|tray\|guides\|liked` |
 | `ig_story` | story and highlight detail, viewers, likers, download |
 | `ig_digest` | what changed since the last call; `wait_s` long-polls realtime events |
 | `ig_insight` | `kind=media\|account\|best\|compare\|demographics` |
-| `ig_write` | every write below, behind one confirm gate |
+| `ig_write` | every write below, behind one confirm gate. This is the only path that mutates. |
 | `ig_queue` | list, schedule, cancel, recurring posts, native Instagram schedule. The local queue needs a runner: a Windows Scheduled Task that runs `python -m as_ig_mcp queue tick` every five minutes, installed once by the user. Instagram's own `schedule_at` stays the server-independent path, so a scheduled post survives our machine being off. |
 | `ig_preset` | caption, hashtag and first-comment presets — local, product-only everywhere else |
 | `ig_health` | live/dead per endpoint class, with the remedy named |
-| `ig_session` | status, relogin with the emailed code, cache clear, export, linked accounts |
-| `ig_account` | account insights units, professional settings, category, AI label, linked accounts |
+| `ig_session` | status, relogin with the emailed code, cache clear, export, linked accounts. Relogin is `python -m as_ig_mcp session relogin`, which prints a prompt for the 6-digit code and then rewrites `session.enc`. |
+| `ig_account` | account insights units, linked accounts (Instagram's own account switcher — accounts linked to this login), and the professional settings that `ig_write` can change |
 
 **Write kinds behind `ig_write`** — `send_message`, `send_media`, `send_voice`,
 `send_file`, `react`, `unsend`, `mark_seen`, `share`, `publish` (photo, video,
@@ -296,6 +321,12 @@ reel, carousel, story, IGTV, quicksnap, cutout sticker), `schedule`,
 `mute`, `report`, `remove_follower`, `close_friend`, `follow_hashtag`,
 `highlight`, `note`, `profile`, `category`, `ai_label`, `crosspost`,
 `collaborate`.
+
+In that list: **IGTV** is Instagram's long-form video format, a separate upload
+endpoint from a reel. **Quicksnap** is Instagram's disappearing photo, sent to
+mutual followers only. A **cutout sticker** is a photo with the background
+removed, uploaded as a sticker. All three exist as separate instagrapi upload
+methods, and all three are in the mapping with `read_only=False`.
 
 **Canonical instagrapi method per feature** (`mapping.py`, the single place to
 change when Instagram moves) — profile `user_info_v1`; followers
@@ -308,8 +339,11 @@ thread messages `direct_messages`; DM search `direct_message_search`; presence
 `direct_active_presence`; send `direct_send` / `direct_send_photo` /
 `direct_send_voice` / `direct_send_file`; reactions `direct_send_reaction`;
 unsend `direct_message_unsend`; publish `photo_upload` / `video_upload` /
-`clip_upload` / `album_upload` / `photo_upload_to_story`; native schedule the
-same methods with `schedule_at`; comments `media_comments` / `media_comment` /
+`clip_upload` / `album_upload` / `photo_upload_to_story` / `igtv_upload` /
+`quicksnap_send` / `photo_upload_to_cutout_sticker` /
+`video_upload_to_cutout_sticker`; native schedule the
+same upload methods with `schedule_at`; comments `media_comments` /
+`media_comment` /
 `comment_bulk_delete` / `comment_pin`; notifications `news_inbox_v1` — **not**
 `notification_likes` and its siblings, which are settings mutators that POST to
 `notifications/change_notification_settings/` with a default of `"off"`;
@@ -344,17 +378,29 @@ mapping entry is one line, but they are verified by unit test only: the method
 exists and is callable with the documented arguments. No live call is made for
 them.
 
-**Realtime** — one daemon thread per server run. On the main thread
-`rt.direct_subscribe()` runs once (it reads `seq_id` and `snapshot_at_ms` from
-`client.direct_threads()` and subscribes to the message-sync stream — without
-it the socket connects and no message ever arrives). The thread loops
-`realtime_read_once()`, pings every 15 seconds (MQTT keep-alive is 20), and
-reconnects with backoff because instagrapi has no reconnect logic. Events
-(`receive`, `message`, `thread_update`, `iris`, `direct`, `typing`, `seen`,
-`presence`) are normalised to `{"ts","event","thread_id","value"}` and appended
-to `events.jsonl`. There is **no** reaction event — reactions arrive as
-message patches and are classified by us. FBNS is skipped (separate host and
-device auth). Sending stays on the HTTP path.
+**Realtime** — one daemon thread per server run. It runs only when the flag
+`AS_IG_REALTIME=1` is set in the environment of the MCP server process;
+without it, `ig_digest` polls and everything else behaves identically. On the
+main thread `rt.direct_subscribe()` runs once (it reads `seq_id` and
+`snapshot_at_ms` from `client.direct_threads()` and subscribes to the
+message-sync stream — without it the socket connects and no message ever
+arrives). The thread loops `realtime_read_once()`, pings every 15 seconds
+(MQTT is the message protocol Instagram speaks on this socket, and its
+keep-alive is 20 seconds), and reconnects with backoff because instagrapi has
+no reconnect logic. Events (`receive`, `message`, `thread_update`, `iris`,
+`direct`, `typing`, `seen`, `presence`) are normalised to
+`{"ts","event","thread_id","value"}` and appended to `events.jsonl`. `iris` is
+Instagram's name for the non-thread part of the realtime payload. There is
+**no** reaction event — reactions arrive as message patches and are classified
+by us. FBNS (Facebook's separate push-notification channel, different host and
+device authentication) is skipped. Sending stays on the HTTP path.
+
+**One login, two servers.** The vendor daemon keeps running as a fallback, and
+both servers use the same Instagram login: our `sessionid` is injected into the
+vendor with `instagram-mcp.exe login --sessionid-env IG_SESSIONID`, so the
+account never carries two live sessions. The vendor's dead tools stay dead —
+its instagrapi is frozen — but it keeps its working reads and its local
+reply-style store.
 
 ## 7. Failure modes & error handling
 
@@ -421,7 +467,7 @@ Agent implements. Each phase ends with a runnable check.
 | 0 | Vendor bug report (wrong URL, repro, fix) | exists in the repo; if aichargelabs ships 3.2.8 the project can shrink to a config change |
 | 1 | Package skeleton, dedicated venv, `session.py` (DPAPI), `client.py`, `mapping.py`, `state.py` | offline tests pass |
 | 2 | Read tools (`ig_status`, `ig_person`, `ig_people`, `ig_feed`, `ig_search`, `ig_story`, `ig_thread`, `ig_inbox`) + `ig_health` | the 13 dead reads return data; health green |
-| 3 | Register in Claude Code | `claude mcp list` shows it; a clean session calls a tool |
+| 3 | Register in Claude Code | `claude mcp add as-ig --scope user -- .venv\Scripts\python.exe -m as_ig_mcp serve`, then `claude mcp list` shows it connected; a clean session calls a tool |
 | 4 | `ig_write` + confirm gate + idempotency + `audit.py` | write-gate, audit and idempotency tests pass |
 | 5 | `ig_session` relogin, `ig_account`, `ig_insight` | relogin works; insights match Instagram's numbers |
 | 6 | `ig_queue`, `ig_preset`, native `schedule_at` | queue test passes; native schedule accepted |
