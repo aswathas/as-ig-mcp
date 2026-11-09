@@ -47,6 +47,14 @@ def presets_path() -> Path:
     return app_dir() / "presets.json"
 
 
+def style_path() -> Path:
+    return app_dir() / "style.json"
+
+
+def media_dir() -> Path:
+    return app_dir() / "media"
+
+
 def ensure_app_dir() -> Path:
     directory = app_dir()
     directory.mkdir(parents=True, exist_ok=True)

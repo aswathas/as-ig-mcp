@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
-from as_ig_mcp import mapping, tools_discovery, tools_feed, tools_people
+from as_ig_mcp import (
+    mapping,
+    tools_account,
+    tools_discovery,
+    tools_feed,
+    tools_inbox,
+    tools_people,
+    tools_story,
+    tools_threads,
+)
 
 READ_TOOL_FEATURES = (
     set(tools_people.FEATURES)
     | set(tools_discovery.FEATURES)
     | set(tools_feed.FEATURES)
+    | set(tools_threads.FEATURES)
+    | set(tools_inbox.FEATURES)
+    | set(tools_story.FEATURES)
+    | set(tools_account.FEATURES)
 )
 
 

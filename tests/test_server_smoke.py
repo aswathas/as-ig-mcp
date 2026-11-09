@@ -25,6 +25,10 @@ EXPECTED_TOOLS = {
     "ig_people",
     "ig_search",
     "ig_feed",
+    "ig_thread",
+    "ig_inbox",
+    "ig_story",
+    "ig_account",
 }
 
 

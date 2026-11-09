@@ -92,6 +92,11 @@ FEATURE_METHODS: dict[str, dict] = {
     # Stories and highlights
     "stories": _entry("user_stories_web", "graphql", "Active stories for a user."),
     "highlights": _entry("user_highlights_v1", "graphql", "Highlight trays for a user."),
+    "highlight_info": _entry("highlight_info", "rest", "Highlight detail and its story items."),
+    "story_info": _entry("story_info", "rest", "Story metadata, media url and status."),
+    "story_viewers": _entry("story_viewers", "rest", "List of users who viewed a story."),
+    "story_likers": _entry("story_likers", "rest", "List of users who liked a story."),
+    "story_download": _entry("story_download", "rest", "Download story media to a local folder."),
     "highlight_create": _entry("highlight_create", "rest", "Create a highlight from stories.", read_only=False),
     "highlight_edit": _entry("highlight_edit", "rest", "Rename or re-cover a highlight.", read_only=False),
     # Direct messages
@@ -99,9 +104,13 @@ FEATURE_METHODS: dict[str, dict] = {
     "business_dm_box": _entry(
         "direct_threads", "graphql", "Business DM box threads, including the general box."
     ),
+    "thread_detail": _entry("direct_thread", "rest", "Full direct thread with participants and messages."),
     "thread_messages": _entry("direct_messages", "rest", "Messages inside one DM thread."),
+    "pending_requests": _entry("direct_pending_inbox", "rest", "Pending direct message requests inbox."),
+    "spam_inbox": _entry("direct_spam_inbox", "rest", "Spam direct message requests inbox."),
     "dm_search": _entry("direct_message_search", "graphql", "Search message bodies across threads."),
     "presence": _entry("direct_active_presence", "rest", "Active presence for one or more threads."),
+    "users_presence": _entry("direct_users_presence", "rest", "Presence for specific user IDs."),
     "send_message": _entry("direct_send", "rest", "Send a text DM.", read_only=False),
     "send_media": _entry("direct_send_photo", "rest", "Send a photo DM.", read_only=False),
     "send_voice": _entry("direct_send_voice", "rest", "Send a voice-note DM.", read_only=False),
@@ -159,6 +168,9 @@ FEATURE_METHODS: dict[str, dict] = {
     "user_search": _entry("search_users", "rest", "Search users by name or handle."),
     "suggestions": _entry("user_suggested_profiles", "rest", "Suggested accounts to follow."),
     # Account
+    "account_info": _entry("account_info", "rest", "Current user account info."),
+    "linked_accounts": _entry("featured_accounts_v1", "rest", "Featured accounts linked to login."),
+    "account_family": _entry("get_account_family_v1", "rest", "Account family linked to login."),
     "profile_edit": _entry("account_edit", "rest", "Edit account profile fields.", read_only=False),
     "category": _entry(
         "account_convert_to_professional", "rest", "Professional account type and category.", read_only=False
@@ -194,9 +206,13 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
     "dm": [
         "thread_list",
         "business_dm_box",
+        "thread_detail",
         "thread_messages",
+        "pending_requests",
+        "spam_inbox",
         "dm_search",
         "presence",
+        "users_presence",
         "send_message",
         "send_media",
         "send_voice",
@@ -221,6 +237,11 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
     "stories": [
         "stories",
         "highlights",
+        "highlight_info",
+        "story_info",
+        "story_viewers",
+        "story_likers",
+        "story_download",
         "highlight_create",
         "highlight_edit",
     ],
@@ -245,6 +266,9 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "account_insights",
     ],
     "account": [
+        "account_info",
+        "linked_accounts",
+        "account_family",
         "profile_edit",
         "category",
         "ai_label",

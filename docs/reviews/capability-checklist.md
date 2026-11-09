@@ -25,19 +25,19 @@ paused it)
 | R2 | Feed, reels, tagged, saved, collections | `ig_feed` for each kind returns a non-empty list | doing — posts, reels, saved, collections verified live; tagged, archive, liked, tray, guides pending |
 | R3 | Followers, following, suggestions | `ig_people` for each kind returns a non-empty list | doing — followers and following verified live; suggestions and requests pending |
 | R4 | Follow requests, approve and decline | `ig_people kind=requests` lists or states none | todo |
-| R5 | DM thread list and message bodies | `ig_thread` on the known thread returns 4 messages | todo |
-| R6 | DM search | `ig_search kind=message` finds a known word | todo |
-| R7 | Message requests and spam inbox | `ig_thread kind=requests` and `kind=spam` | todo |
-| R8 | Group threads | `ig_thread kind=group` | todo |
-| R9 | Presence | `ig_thread` reports presence for a thread | todo |
+| R5 | DM thread list and message bodies | `ig_thread` on the known thread returns 4 messages | green — verified live: 5 messages, 1 participant, message ids and timestamps |
+| R6 | DM search | `ig_search kind=message` finds a known word | doing — the tool exists; not yet verified against a live search |
+| R7 | Message requests and spam inbox | `ig_thread kind=requests` and `kind=spam` | doing — pending the write phase, since approving a request is a write |
+| R8 | Group threads | `ig_thread kind=group` | doing — instagrapi has no standalone group method; groups are filtered out of the thread list by `thread.is_group` |
+| R9 | Presence | `ig_thread` reports presence for a thread | doing — returns null rather than a guess when the call gives nothing |
 | R10 | Notifications | `ig_feed kind=notifications` returns likes, comments, followers, tagged | green — verified live, 12 activity items |
 | R11 | Mentions, inbox notes, on-post notes | `ig_feed` and `ig_write kind=note` | todo |
 | R12 | Hashtags: info, top, recent, following | `ig_search kind=hashtag`; `ig_write kind=follow_hashtag` | doing — search verified live; following is a write, pending the gate |
 | R13 | Places, music, top search | `ig_search` for each kind | todo |
-| R14 | Stories: own, others, tray, viewers, likers | `ig_feed kind=tray`, `ig_story` | todo |
+| R14 | Stories: own, others, tray, viewers, likers | `ig_feed kind=tray`, `ig_story` | doing — `ig_story` built and returns a clear error without an id; tray and viewers not yet verified live |
 | R15 | Highlights: read and write | `ig_story` reads; `ig_write kind=highlight` writes | todo |
 | R16 | Comments: read, reply, delete, pin, bulk delete, hold, approve | `ig_feed include=comments`; `ig_write kind=comment` | todo |
-| R17 | Insights: media, account, best, compare, demographics | `ig_insight` for each kind | todo |
+| R17 | Insights: media, account, best, compare, demographics | `ig_insight` for each kind | doing — account insights live through `ig_account` (profile visits, follower growth, top posts, stories count); the dedicated `ig_insight` tool is not built yet |
 | R18 | Business DM box | `ig_thread box=general` returns threads | todo |
 | R19 | Media download, upload with music, cutout sticker | `ig_write kind=download`; publish kinds | todo |
 | R20 | Profile edit, category, professional type, AI label | `ig_write kind=profile\|category\|ai_label` | todo |

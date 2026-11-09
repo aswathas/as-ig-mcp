@@ -10,12 +10,16 @@ except ModuleNotFoundError:  # mcp 2.x renamed FastMCP to MCPServer
     from mcp.server.mcpserver import MCPServer as _Server
 
 from . import (
+    tools_account,
     tools_discovery,
     tools_feed,
     tools_health,
+    tools_inbox,
     tools_people,
     tools_session,
     tools_status,
+    tools_story,
+    tools_threads,
 )
 
 mcp = _Server("as-ig")
@@ -114,6 +118,58 @@ def ig_feed(
         limit=limit,
         include=include,
     )
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] Read a DM thread messages, participants, presence, and pagination cursor."
+)
+def ig_thread(
+    thread_id: str,
+    cursor: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    return _safe(tools_threads.ig_thread, thread_id=thread_id, cursor=cursor, limit=limit)
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] List DM threads awaiting a reply, with optional suggested reply and style draft."
+)
+def ig_inbox(
+    hours: int = 48,
+    limit: int = 10,
+    suggest: bool = False,
+    thread_id: str | None = None,
+) -> dict[str, Any]:
+    return _safe(
+        tools_inbox.ig_inbox,
+        hours=hours,
+        limit=limit,
+        suggest=suggest,
+        thread_id=thread_id,
+    )
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] Story and highlight details, viewers, likers, or download media to local folder."
+)
+def ig_story(
+    story_id: str | None = None,
+    highlight_id: str | None = None,
+    action: str = "info",
+) -> dict[str, Any]:
+    return _safe(
+        tools_story.ig_story,
+        story_id=story_id,
+        highlight_id=highlight_id,
+        action=action,
+    )
+
+
+@mcp.tool(
+    description="[AS-IG-MCP] Account profile, metrics, insights, and linked switcher accounts."
+)
+def ig_account() -> dict[str, Any]:
+    return _safe(tools_account.ig_account)
 
 
 def main() -> None:

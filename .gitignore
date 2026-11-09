@@ -7,3 +7,7 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+cmd_*.log
+agy_*.log
+*.log
+!docs/**/*.md
