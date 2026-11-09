@@ -39,7 +39,7 @@ paused it)
 | R16 | Comments: read, reply, delete, pin, bulk delete, hold, approve | `ig_feed include=comments`; `ig_write kind=comment` | todo |
 | R17 | Insights: media, account, best, compare, demographics | `ig_insight` for each kind | doing — account insights live through `ig_account` (profile visits, follower growth, top posts, stories count); the dedicated `ig_insight` tool is not built yet |
 | R18 | Business DM box | `ig_thread box=general` returns threads | todo |
-| R19 | Media download, upload with music, cutout sticker | `ig_write kind=download`; publish kinds | todo |
+| R19 | Media download, upload with music, cutout sticker | `ig_feed` and `ig_story` download; `ig_write` publish kinds for upload-with-music and cutout | doing — download is a read, so it belongs to the read tools, not `ig_write` |
 | R20 | Profile edit, category, professional type, AI label | `ig_write kind=profile\|category\|ai_label` | todo |
 | R21 | Close friends, block, mute, report, remove follower | `ig_write` for each kind | todo |
 | R22 | Collaboration invite, crosspost to Facebook and Threads | `ig_write kind=collaborate\|crosspost` | todo |

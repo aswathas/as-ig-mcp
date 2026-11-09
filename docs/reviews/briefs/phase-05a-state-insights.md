@@ -41,6 +41,16 @@ costs no dependency.
   other's writes, and that one process writing a key does not remove another
   process's key.
 
+## 1b. Five promised write kinds have no mapping entry
+
+`mapping.py` is missing entries for `igtv_upload` (IGTV), `quicksnap_send`
+(disappearing photo), `cutout_sticker` (`photo_upload_to_cutout_sticker` /
+`video_upload_to_cutout_sticker`), `mute_stories` (`mute_stories_from_follow`)
+and `first_comment` (the same `media_comment` method with
+`replied_to_comment_id` set). Add all five with `read_only: False`, each with
+its instagrapi method name and a one-line summary. Look the method names up in
+the installed source before using them.
+
 ## 2. `ig_insight`
 
 `ig_insight(kind="media", media_pk=None, username=None, user_id=None, time_frame="ONE_WEEK", order_by="REACH_COUNT", limit=10)`
@@ -117,7 +127,7 @@ All tests use a temporary APPDATA and a fake Instagram client. No network.
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-All tests pass, zero network calls, count higher than 73. Print the pytest summary
+All tests pass, zero network calls, count higher than 89. Print the pytest summary
 line as your last output.
 
 ## 6. Constraints
