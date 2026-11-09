@@ -121,4 +121,59 @@ appear in Claude Code from the next session onward.
 
 **Next.** Phase 3: the read tools.
 
+## 2026-11-10 — Phases 3a, 3b, 4: the read tools and the write gate
+
+**3a.** `ig_person`, `ig_people`, `ig_search`, `ig_feed`. Verified live: profile
+(244 followers, 44 following, 67 media, business), followers and following,
+hashtag and user search, posts, reels, saved, 12 activity notifications. One
+bug the live check caught: `ig_feed kind=posts` filtered reels out, and every one
+of this account's 67 posts is a reel, so it returned zero. Fixed with a
+regression test.
+
+**3b.** `ig_thread`, `ig_inbox`, `ig_story`, `ig_account`. Verified live: 5
+messages in a thread with ids and timestamps, both waiting threads listed, the
+account block and the insights units. Presence returns null rather than a
+guess.
+
+**4.** The write gate. After Stage 8 showed the code gate never proved consent,
+the design changed: the account owner approves by clicking Yes in a dialog on
+their own screen. No code exists anywhere. Verified with a fake client: denied
+calls nothing, no desktop calls nothing, approved calls exactly once, a
+replayed idempotency key returns already_done, and no six-digit code appears in
+the result.
+
+## 2026-11-10 — Phases 5a, 5b, 6: state, insights, queue, realtime
+
+**5a.** State moved to SQLite (WAL, 10s busy timeout) because loose JSON meant
+the last writer clobbered the whole cache — the 90-second cache is the main
+defence against an account block, and a silent clobber switched it off.
+`ig_insight` landed with six kinds, all verified live; where Instagram did not
+return a field the tool says so instead of inventing a number. `session login`
+and `session relogin` give a stranger a way in.
+
+**5b.** The publish queue, presets, and a crash-safe tick runner: an item is
+marked `publishing` before Instagram is called, so a crash leaves it reported as
+possibly published rather than republished.
+
+**6.** The digest and the realtime socket. Two live bugs, both found only by
+running against the real socket: Instagram's payload carries raw bytes, which
+killed the reader thread when the event was written as JSON; and the private
+socket closed on us with an SSL error and then segfaulted the interpreter during
+teardown. Events are now coerced to JSON-safe values, and the socket runs in its
+own worker process that writes events to `events.jsonl` and its state to
+`realtime_status.json`. The server supervises and restarts that worker and
+reads the state file instead of touching the socket, so a broken socket cannot
+take the server down. Verified live: the socket connects, subscribes with
+seq_id 1231, and reconnects when Instagram closes it. The digest reports
+first_run and then nothing changed.
+
+**One login on the account.** The vendor daemon was pointed at our sessionid
+(`instagram-mcp.exe login --sessionid-env IG_SESSIONID`). It reports
+`session_source: browser`, connection open, no errors, and its triage still
+returns the same two threads — so both servers now share one Instagram login
+instead of the account carrying two.
+
+**Next.** Phase 7 packaging, then the live write test, then publishing.
+
+
 
