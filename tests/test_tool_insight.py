@@ -203,3 +203,30 @@ def test_compare_groups_posts_by_age_band(tmp_path, monkeypatch):
     for row in result["items"]:
         assert row["age_band"] in result["bands"]
         assert "rank_in_band" in row
+
+
+class MediaError(Exception):
+    pass
+
+
+def test_compare_falls_back_to_public_like_count_on_media_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    _install(
+        monkeypatch,
+        {
+            "user_medias_v1": [
+                {"pk": "1", "taken_at": 1_700_000_000, "like_count": 15, "comment_count": 2},
+                {"pk": "2", "taken_at": 1_700_500_000, "like_count": 40, "comment_count": 5},
+            ],
+            "insights_media": MediaError("not owner"),
+        },
+    )
+
+    result = tools_insight.ig_insight(kind="compare", order_by="LIKE_COUNT", limit=5)
+
+    assert result["ok"] is True
+    assert [row["media_pk"] for row in result["items"]] == ["2", "1"]
+    assert [row["value"] for row in result["items"]] == [40, 15]
+    assert [row["like_count"] for row in result["items"]] == [40, 15]
+    assert [row["comment_count"] for row in result["items"]] == [5, 2]
+    assert all(row["metric_source"] == "public" for row in result["items"])

@@ -120,6 +120,26 @@ def test_place_without_coordinates_returns_the_documented_error(tmp_path, monkey
     }
 
 
+def test_place_with_explicit_coordinates_works_without_env_vars(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.delenv("IG_PLACES_LAT", raising=False)
+    monkeypatch.delenv("IG_PLACES_LNG", raising=False)
+    fake = _install(
+        monkeypatch,
+        {"fbsearch_places": [{"pk": 55, "name": "Marina Beach", "lat": 13.05, "lng": 80.28}]},
+    )
+
+    result = tools_discovery.ig_search(
+        kind="place", query="chennai", lat=13.05, lng=80.28
+    )
+
+    assert result["ok"] is True
+    assert "fbsearch_places" in fake.names()
+    assert result["items"] == [
+        {"name": "Marina Beach", "id": "55", "lat": 13.05, "lng": 80.28}
+    ]
+
+
 def test_unknown_kind_returns_an_error(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
 

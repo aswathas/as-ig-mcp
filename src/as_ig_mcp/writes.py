@@ -22,6 +22,7 @@ DEFAULT_APPROVE_TIMEOUT = 300
 
 MB_YESNO = 0x00000004
 MB_SETFOREGROUND = 0x00010000
+MB_DEFBUTTON2 = 0x00000200
 IDYES = 6
 IDNO = 7
 IDCANCEL = 2
@@ -246,6 +247,24 @@ def _approve_timeout(timeout_s: float = DEFAULT_APPROVE_TIMEOUT) -> float:
         return float(DEFAULT_APPROVE_TIMEOUT)
 
 
+def _close_thread_windows(thread_id: int) -> None:
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        WM_CLOSE = 0x0010
+        CALLBACK = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def _close(hwnd, _lparam):
+            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+            return True
+
+        user32.EnumThreadWindows(wintypes.DWORD(thread_id), CALLBACK(_close), 0)
+    except BaseException:
+        pass
+
+
 def show_approval(preview: str, timeout_s: float = DEFAULT_APPROVE_TIMEOUT) -> bool | None:
     """Show the yes/no dialog on its own thread and wait for the click.
 
@@ -275,7 +294,7 @@ def show_approval(preview: str, timeout_s: float = DEFAULT_APPROVE_TIMEOUT) -> b
                     None,
                     body,
                     TITLE,
-                    MB_YESNO | MB_SETFOREGROUND,
+                    MB_YESNO | MB_SETFOREGROUND | MB_DEFBUTTON2,
                 )
             )
         except BaseException as exc:  # no desktop, no user32, a broken session
@@ -289,6 +308,7 @@ def show_approval(preview: str, timeout_s: float = DEFAULT_APPROVE_TIMEOUT) -> b
 
     worker.join(timeout)
     if worker.is_alive():
+        _close_thread_windows(worker.native_id)
         return False
     if "error" in outcome:
         return None

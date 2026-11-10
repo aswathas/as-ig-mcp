@@ -10,8 +10,9 @@ changed since last time, and pushes new messages live. Built on instagrapi
 probe classes, profile reads, feed/reels/saved/notifications, DM threads and message
 bodies, account/demographics/media insights, delta digest, and the realtime
 socket worker are verified live against a real account. The interactive confirmation
-dialog gate on mutations, the local publish queue, and live write execution
-are tested offline and scheduled for live end-to-end write testing. DM auto-reply,
+dialog gate on mutations and live write execution are verified against a real
+account (approved, denied, replayed); the local publish queue is tested offline.
+DM auto-reply,
 comment auto-reply, and multi-account are parked. See
 `docs/reviews/capability-checklist.md` for the per-capability state and
 `docs/reviews/build-log.md` for what ran and what broke.
@@ -103,7 +104,7 @@ desktop, writes are refused rather than approved by the agent.
 src/as_ig_mcp/     the server
 docs/superpowers/  the approved spec
 docs/study/        the market study and the capability matrix
-docs/reviews/      the capability checklist, the build log, the review reports
+docs/reviews/      the checklist, build log, decision log and change inventory
 ```
 
 ## Licence and repository

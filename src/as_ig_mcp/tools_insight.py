@@ -395,6 +395,12 @@ def _compare(
         pk = client.field_value(post, "pk")
         if pk is None:
             continue
+        like_count = client.field_value(post, "like_count")
+        comment_count = client.field_value(post, "comment_count")
+        public_fallback = {
+            "likes": like_count,
+            "comments": comment_count,
+        }.get(metric)
         try:
             raw = client.call_feature(instagram, "post_insights", media_pk=str(pk))
         except Exception as exc:
@@ -402,6 +408,13 @@ def _compare(
             value = None
         else:
             value = _metric(raw, candidates)
+        if value is not None:
+            metric_source = "insights"
+        elif public_fallback is not None:
+            value = public_fallback
+            metric_source = "public"
+        else:
+            metric_source = "unavailable"
         days = _age_days(post, now)
         rows.append(
             {
@@ -411,6 +424,9 @@ def _compare(
                 "age_band": _band(days),
                 "metric": metric,
                 "value": value,
+                "like_count": like_count,
+                "comment_count": comment_count,
+                "metric_source": metric_source,
             }
         )
 

@@ -160,3 +160,31 @@ def test_download_path_stays_inside_media_folder(tmp_path, monkeypatch):
     res = tools_story.ig_story(story_id="story_123", action="download")
     assert res["ok"] is False
     assert "outside media" in res["error"]
+
+
+def test_story_viewers_key_error_returns_empty_list(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    fake = _install(monkeypatch, {"story_viewers": KeyError("viewers")})
+
+    res = tools_story.ig_story(story_id="story_123", action="viewers")
+    assert res["ok"] is True
+    assert res["action"] == "viewers"
+    assert res["story_id"] == "story_123"
+    assert res["viewers"] == []
+    assert "viewers" in res["note"]
+    assert "story_viewers" in fake.names()
+
+
+def test_story_viewers_value_error_returns_empty_list(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    fake = _install(monkeypatch, {"story_viewers": ValueError("bad payload")})
+
+    res = tools_story.ig_story(story_id="story_123", action="viewers")
+    assert res["ok"] is True
+    assert res["action"] == "viewers"
+    assert res["story_id"] == "story_123"
+    assert res["viewers"] == []
+    assert "note" in res
+    assert "viewers" in res["note"]
+    assert "story_viewers" in fake.names()
+

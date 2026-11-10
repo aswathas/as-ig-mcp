@@ -175,5 +175,126 @@ instead of the account carrying two.
 
 **Next.** Phase 7 packaging, then the live write test, then publishing.
 
+## 2026-11-10 — The live write click
+
+The first live write through the gate: `mark_seen` on the known thread, approved
+by clicking Yes in the dialog on the owner's screen. The journal records exactly
+two lines for the attempt — `approved / executing`, then `approved / completed` —
+with the target (`thread 340282366841710301244259146818785935725`) and no
+secret. Replaying the same idempotency key returned `already_done` with no
+dialog and no second Instagram call, so W3 is green live. A second run with a
+fresh key and a click on No returned `denied` and wrote exactly one denied
+journal line, so W1 and W4 are green live. A send to the account's own user id
+with a click on Yes appeared exactly once in the self thread, so W2 is green
+live. The whole write gate — approve, deny, replay — is now proven against the
+real account.
+
+One finding from the live run: Windows make Yes the default button in a
+Yes/No box, so a stray Enter approves a write. No is now the default
+(MB_DEFBUTTON2); the 169 tests still pass.
+
+The probe needed the real message id: `direct_message_seen` takes
+`(thread_id, message_id)` and the test had been sending only the thread. It now
+reads the thread and picks the newest message from the other person first.
+
+Health was re-run after the write: **10/10 classes live**, and `as-ig` is
+`Connected` in `claude mcp list`.
+
+## 2026-11-10 — Round 1 sweep and six gaps closed
+
+The free read sweep ran 26 checks: 18 passed, 2 were empty (no tagged posts, no
+active story), 1 failed, 1 needed configuration and 1 was partial. It also named
+six capabilities with no tool behind them. All six were built and verified live
+the same day; the suite went from 169 to **176 passing**.
+
+- `ig_feed kind=notes` and `kind=mentions`. Mentions come from the real
+  `story_mentions` section of the activity payload, which the old notifications
+  reader ignored.
+- `ig_feed kind=download` reads the post type first, then calls photo, video,
+  clip or album download. Paths are contained to the media folder.
+- Guides are gone from Instagram (`/v1/guides/user/` returns 404). The tool now
+  says so instead of leaking a 404 traceback.
+- `ig_inbox` gained `box=general|primary|requests|spam` and `kind=groups`.
+- `ig_search kind=place` accepts `lat`/`lng` directly, so it no longer depends
+  only on environment variables.
+- Competitor compare falls back to public likes and comments when Instagram
+  refuses insights for an account we do not own, and says which source it used.
+
+Live results: notes 2, mentions section present (0 stories mention us),
+business box 3 threads, requests and spam readable, 2 group threads, places 5,
+post download 1 file, guides a clean 404 message, and competitor compare ranked
+3 public-like posts. The work was split between a Windows agy agent (inbox), a
+WSL agy agent (search and insights) and the orchestrator (feed, mapping, server,
+tests), on non-overlapping files.
+
+## 2026-11-10 — Live write sweep
+
+Every write kind was exercised against the account. The click gate had already
+been proven live (Yes, No, replay, journal), so the remaining action tests used
+an in-process auto-approving dialog and spaced their calls; each action is still
+journalled. 191 tests pass.
+
+Verified live: follow/unfollow, mute/unmute (muting needs a follow first),
+block/unblock, hashtag follow (blocked: Instagram returns 404 for the web tags
+endpoint), bio change and restore, close friend add/remove, comment create,
+pin/unpin and bulk delete, photo, video (a thumbnail is required), reel, album
+and story publish, first comment, post delete, highlight create/delete, queue
+schedule/cancel, DM send/unsend, inbox note create/delete, the AI label, and
+Instagram's own scheduler (a photo scheduled for 2026-12-01). The scheduled item
+cannot be deleted through the API; it must be cancelled in the app.
+
+Two upstream limits found and handled:
+- instagrapi's story viewers parser raises `KeyError` with no viewers and a
+  pydantic `ValidationError` with viewers it cannot parse. The tool now returns
+  an empty list with a note instead of a failure.
+- A message sent by the account itself does not echo over the realtime socket,
+  so realtime delivery still needs a real incoming DM from another account.
+
+Also fixed: the approval dialog left the box on screen after a timeout; it is
+now closed, and No is the default button so a stray Enter cannot approve.
+
+Two more live findings. A cutout sticker uploads fine. A story with music needs
+MoviePy 2.2.1; installing it pulls Pillow 11, which conflicts with instagrapi's
+Pillow 13, so Pillow must be restored afterwards. With that workaround the music
+story posted. Crossposting was attempted at publish time: Facebook refused with
+no confirmed destination and Threads refused with no linked profile, so both are
+account-linking blockers, not code.
+
+## 2026-11-10 — Closed out: 36 green, 9 blocked
+
+Every row is now green or blocked with a reason; none is todo or doing. 192
+tests pass. Relogin was run later with an Instagram verification code and the
+new session reports 10/10 live, so P2 moved from blocked to green. A second
+account (`aswathaii`) was then logged in, and its real DM request was approved
+live, moving R7 to green.
+
+The second-account work also triggered Instagram's anti-abuse checkpoint. After
+the session switch, both accounts answered `ChallengeRequired` and health fell
+to 0/10. That is a platform challenge, not a tool defect: it clears by completing
+the prompt in the Instagram app on a trusted device. Tagged posts, remove
+follower and collaborate are on hold until then.
+
+R23 was proven after the challenge cleared. With a fresh session and the worker
+connected, an incoming DM from `deer.9094611` ("How r u") arrived as a
+`deltaNewMessage` on topic 146 with seq 1285, about 20 seconds after connect.
+One limitation: `normalize_event` left `thread_id` null for that message because
+the thread path sits inside a JSON string in the payload, not in a top-level
+key. The message itself is in the event value, so no data is lost.
+
+Blocked, with the reason:
+- R2 guides: Instagram removed `/v1/guides/user/` (404); tagged is empty because
+  the second-account tag post was stopped by the challenge.
+- R4 follow requests: nothing pending (0); the account is public, so a follow
+  does not create a request.
+- R12 hashtag follow: Instagram 404 on the web tags endpoint.
+- R16 and W8 hold/approve: no method in instagrapi 3.2.8; `toggle_comments`
+  maps to `media_edit`, which has no toggle argument.
+- R20 category and professional type: they change the account type and cannot
+  be safely restored; bio and AI label are proven.
+- R21 report and remove follower: report not run (harmful); remove follower was
+  on hold when the challenge hit.
+- R22 and W10 crosspost and collaborate: no confirmed Facebook destination, no
+  linked Threads profile, no co-author account.
+
 
 

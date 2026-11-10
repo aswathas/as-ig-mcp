@@ -207,3 +207,106 @@ def test_sanitize_suggested_reply_directly():
     assert "800" not in sanitized
     assert "555" not in sanitized
     assert "fourth" not in sanitized
+
+
+def test_box_requests(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    now = datetime.now(timezone.utc)
+    thread = {
+        "id": "t_req",
+        "users": [{"pk": "10", "username": "requester"}],
+        "messages": [
+            {
+                "id": "m_req",
+                "user_id": "10",
+                "timestamp": now,
+                "text": "Can I message you?",
+                "is_sent_by_viewer": False,
+            }
+        ],
+    }
+    fake = _install(monkeypatch, {"direct_pending_inbox": [thread]})
+
+    result = tools_inbox.ig_inbox(box="requests")
+    assert result["ok"] is True
+    assert result["box"] == "requests"
+    assert len(result["items"]) == 1
+    assert result["items"][0]["thread_id"] == "t_req"
+    assert ("direct_pending_inbox", {"amount": 10}) in fake.calls
+
+
+def test_box_general(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    now = datetime.now(timezone.utc)
+    thread = {
+        "id": "t_gen",
+        "users": [{"pk": "20", "username": "general_user"}],
+        "messages": [
+            {
+                "id": "m_gen",
+                "user_id": "20",
+                "timestamp": now,
+                "text": "General thread message",
+                "is_sent_by_viewer": False,
+            }
+        ],
+    }
+    fake = _install(monkeypatch, {"direct_threads": [thread]})
+
+    result = tools_inbox.ig_inbox(box="general")
+    assert result["ok"] is True
+    assert result["box"] == "general"
+    assert len(result["items"]) == 1
+    assert result["items"][0]["thread_id"] == "t_gen"
+    assert ("direct_threads", {"amount": 10, "box": "general"}) in fake.calls
+
+
+def test_kind_groups(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    now = datetime.now(timezone.utc)
+    t_dm = {
+        "id": "t_dm",
+        "is_group": False,
+        "users": [{"pk": "30", "username": "single_user"}],
+        "messages": [
+            {
+                "id": "m_dm",
+                "user_id": "30",
+                "timestamp": now,
+                "text": "1-on-1 message",
+                "is_sent_by_viewer": False,
+            }
+        ],
+    }
+    t_grp = {
+        "id": "t_grp",
+        "is_group": True,
+        "users": [
+            {"pk": "31", "username": "group_user1"},
+            {"pk": "32", "username": "group_user2"},
+        ],
+        "messages": [
+            {
+                "id": "m_grp",
+                "user_id": "31",
+                "timestamp": now,
+                "text": "Group message",
+                "is_sent_by_viewer": False,
+            }
+        ],
+    }
+    fake = _install(monkeypatch, {"direct_threads": [t_dm, t_grp]})
+
+    result = tools_inbox.ig_inbox(kind="groups")
+    assert result["ok"] is True
+    assert result["kind"] == "groups"
+    assert len(result["items"]) == 1
+    assert result["items"][0]["thread_id"] == "t_grp"
+    assert result["items"][0]["is_group"] is True
+    assert ("direct_threads", {"amount": 30}) in fake.calls
+
+
+def test_unknown_box():
+    result = tools_inbox.ig_inbox(box="invalid_box")
+    assert result["ok"] is False
+    assert result["error"] == "unknown box: invalid_box; valid: general, primary, requests, spam"

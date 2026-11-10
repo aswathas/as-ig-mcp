@@ -100,12 +100,17 @@ def _message_item(pair: Any) -> dict[str, Any]:
     }
 
 
-def _coordinates() -> tuple[float, float] | None:
-    lat = os.environ.get("IG_PLACES_LAT")
-    lng = os.environ.get("IG_PLACES_LNG")
-    if lat is None or lng is None or lat == "" or lng == "":
+def _coordinates(
+    lat: float | None = None,
+    lng: float | None = None,
+) -> tuple[float, float] | None:
+    if lat is not None and lng is not None:
+        return float(lat), float(lng)
+    env_lat = os.environ.get("IG_PLACES_LAT")
+    env_lng = os.environ.get("IG_PLACES_LNG")
+    if env_lat is None or env_lng is None or env_lat == "" or env_lng == "":
         return None
-    return float(lat), float(lng)
+    return float(env_lat), float(env_lng)
 
 
 def _place_search(instagram: Any, query: str, lat: float, lng: float) -> list[Any]:
@@ -122,7 +127,15 @@ def _place_search(instagram: Any, query: str, lat: float, lng: float) -> list[An
     )
 
 
-def _dispatch(instagram: Any, settings: dict[str, Any], kind: str, query: str, limit: int) -> list[Any]:
+def _dispatch(
+    instagram: Any,
+    settings: dict[str, Any],
+    kind: str,
+    query: str,
+    limit: int,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> list[Any]:
     if kind in {"user", "account"}:
         if kind == "account" and not query:
             query = settings_identity(settings)["username"] or ""
@@ -143,11 +156,11 @@ def _dispatch(instagram: Any, settings: dict[str, Any], kind: str, query: str, l
         return [_hashtag_item(tag)] if tag is not None else []
 
     if kind == "place":
-        coordinates = _coordinates()
+        coordinates = _coordinates(lat, lng)
         if coordinates is None:
             raise PlaceCoordinatesMissing(PLACE_ENV_ERROR)
-        lat, lng = coordinates
-        places = _place_search(instagram, query, lat, lng)
+        place_lat, place_lng = coordinates
+        places = _place_search(instagram, query, place_lat, place_lng)
         return [_place_item(place) for place in places][:limit]
 
     if kind == "music":
@@ -165,7 +178,13 @@ def _dispatch(instagram: Any, settings: dict[str, Any], kind: str, query: str, l
     return [_message_item(pair) for pair in _items(results)][:limit]
 
 
-def ig_search(kind: str = "user", query: str = "", limit: int = 20) -> dict[str, Any]:
+def ig_search(
+    kind: str = "user",
+    query: str = "",
+    limit: int = 20,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> dict[str, Any]:
     """Search one Instagram surface and return plain items."""
     try:
         kind = str(kind or "user").strip().lower()
@@ -174,7 +193,7 @@ def ig_search(kind: str = "user", query: str = "", limit: int = 20) -> dict[str,
         query = str(query or "").strip()
         limit = max(int(limit or 20), 1)
 
-        if kind == "place" and _coordinates() is None:
+        if kind == "place" and _coordinates(lat, lng) is None:
             return {"ok": False, "error": PLACE_ENV_ERROR}
 
         instagram, settings = client.open_client()
@@ -184,12 +203,15 @@ def ig_search(kind: str = "user", query: str = "", limit: int = 20) -> dict[str,
                 raise ValueError("the session has no username; pass query")
 
         cache = Cache()
-        key = make_key("ig_search", {"kind": kind, "query": query, "limit": limit})
+        key = make_key(
+            "ig_search",
+            {"kind": kind, "query": query, "limit": limit, "lat": lat, "lng": lng},
+        )
         cached = cache.get(key)
         if isinstance(cached, dict):
             return cached
 
-        items = _dispatch(instagram, settings, kind, query, limit)
+        items = _dispatch(instagram, settings, kind, query, limit, lat=lat, lng=lng)
         payload = {"ok": True, "kind": kind, "query": query, "items": items}
         cache.set(key, payload, ttl=DEFAULT_TTL)
         return payload

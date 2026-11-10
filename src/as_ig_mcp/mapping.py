@@ -43,10 +43,11 @@ MUTATING_METHODS: frozenset[str] = frozenset(
     photo_upload photo_configure video_upload video_configure clip_upload clip_configure
     album_upload album_configure igtv_upload igtv_configure
     quicksnap_send quicksnap_delete
-    photo_upload_to_story photo_upload_to_story_with_music video_upload_to_story
+    photo_upload_to_story photo_upload_to_story_with_music
+    video_upload_to_story video_upload_to_story_with_music
     photo_upload_to_cutout_sticker video_upload_to_cutout_sticker
     photo_configure_to_story photo_configure_to_cutout_sticker
-    media_comment media_edit comment_like comment_unlike comment_pin comment_unpin
+    media_comment media_edit media_delete comment_like comment_unlike comment_pin comment_unpin
     comment_bulk_delete media_note_create media_note_delete create_note delete_note
     highlight_create highlight_edit highlight_change_title highlight_change_cover
     highlight_add_stories highlight_remove_stories highlight_delete
@@ -98,6 +99,9 @@ FEATURE_METHODS: dict[str, dict] = {
         "user_follow_request_decline", "rest", "Decline a follow request.", read_only=False
     ),
     "close_friend": _entry("close_friend_add", "rest", "Add an account to close friends.", read_only=False),
+    "close_friend_remove": _entry(
+        "close_friend_remove", "rest", "Remove an account from close friends.", read_only=False
+    ),
     # Insights
     "best_posts": _entry(
         "insights_media_feed_all", "graphql", "Instagram's own ranked best posts for a window."
@@ -114,6 +118,13 @@ FEATURE_METHODS: dict[str, dict] = {
     "story_download": _entry("story_download", "rest", "Download story media to a local folder."),
     "highlight_create": _entry("highlight_create", "rest", "Create a highlight from stories.", read_only=False),
     "highlight_edit": _entry("highlight_edit", "rest", "Rename or re-cover a highlight.", read_only=False),
+    "highlight_delete": _entry("highlight_delete", "rest", "Delete a highlight.", read_only=False),
+    "publish_story_music": _entry(
+        "photo_upload_to_story_with_music",
+        "rest",
+        "Publish a story with a music track.",
+        read_only=False,
+    ),
     # Direct messages
     "thread_list": _entry("direct_threads", "graphql", "DM threads for the account, newest first."),
     "business_dm_box": _entry(
@@ -123,6 +134,9 @@ FEATURE_METHODS: dict[str, dict] = {
     "thread_messages": _entry("direct_messages", "rest", "Messages inside one DM thread."),
     "pending_requests": _entry("direct_pending_inbox", "rest", "Pending direct message requests inbox."),
     "spam_inbox": _entry("direct_spam_inbox", "rest", "Spam direct message requests inbox."),
+    "dm_request_approve": _entry(
+        "direct_request_approve", "rest", "Approve a pending direct message request.", read_only=False
+    ),
     "dm_search": _entry("direct_message_search", "graphql", "Search message bodies across threads."),
     "presence": _entry("direct_active_presence", "rest", "Active presence for one or more threads."),
     "users_presence": _entry("direct_users_presence", "rest", "Presence for specific user IDs."),
@@ -147,6 +161,12 @@ FEATURE_METHODS: dict[str, dict] = {
     "publish_reel": _entry("clip_upload", "rest", "Publish a reel.", read_only=False),
     "publish_album": _entry("album_upload", "rest", "Publish a carousel album.", read_only=False),
     "publish_story": _entry("photo_upload_to_story", "rest", "Publish a photo to stories.", read_only=False),
+    "publish_story_video_music": _entry(
+        "video_upload_to_story_with_music",
+        "rest",
+        "Publish a video story with a music track.",
+        read_only=False,
+    ),
     "igtv_upload": _entry("igtv_upload", "rest", "Publish a long-form IGTV video.", read_only=False),
     "quicksnap_send": _entry(
         "quicksnap_send", "rest", "Send a disappearing photo to mutual followers.", read_only=False
@@ -183,6 +203,12 @@ FEATURE_METHODS: dict[str, dict] = {
     "saved_media": _entry("collection_medias", "rest", "Media inside a saved collection."),
     "liked": _entry("liked_medias", "rest", "Media the account has liked."),
     "archived": _entry("archive_medias", "rest", "The account's archived media."),
+    "media_info": _entry("media_info", "rest", "Metadata for one post, including its media type."),
+    "media_delete": _entry("media_delete", "rest", "Delete one of our posts.", read_only=False),
+    "photo_download": _entry("photo_download", "rest", "Download a photo post."),
+    "video_download": _entry("video_download", "rest", "Download a video post."),
+    "clip_download": _entry("clip_download", "rest", "Download a reel."),
+    "album_download": _entry("album_download", "rest", "Download a carousel album."),
     "comments": _entry("media_comments", "rest", "Comments on a media item."),
     "comment_reply": _entry("media_comment", "rest", "Post a comment or reply.", read_only=False),
     "first_comment": _entry(
@@ -197,6 +223,7 @@ FEATURE_METHODS: dict[str, dict] = {
     ),
     "notes": _entry("get_notes", "graphql", "Inbox and on-post notes."),
     "note_create": _entry("create_note", "graphql", "Create an inbox note.", read_only=False),
+    "note_delete": _entry("delete_note", "rest", "Delete an inbox note.", read_only=False),
     "hashtag_info": _entry("hashtag_info", "rest", "Hashtag metadata and follower counts."),
     "hashtag_top": _entry("hashtag_medias_top", "graphql", "Top posts for a hashtag."),
     "hashtag_recent": _entry("hashtag_medias_recent", "graphql", "Recent posts for a hashtag."),
@@ -248,6 +275,7 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "follow_request_approve",
         "follow_request_decline",
         "close_friend",
+        "close_friend_remove",
     ],
     "dm": [
         "thread_list",
@@ -256,6 +284,7 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "thread_messages",
         "pending_requests",
         "spam_inbox",
+        "dm_request_approve",
         "dm_search",
         "presence",
         "users_presence",
@@ -301,11 +330,15 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "story_download",
         "highlight_create",
         "highlight_edit",
+        "highlight_delete",
+        "publish_story_music",
+        "publish_story_video_music",
     ],
     "discovery": [
         "notifications",
         "notes",
         "note_create",
+        "note_delete",
         "hashtag_info",
         "hashtag_top",
         "hashtag_recent",
@@ -341,7 +374,13 @@ FEATURES_BY_AREA: dict[str, list[str]] = {
         "saved_media",
         "liked",
         "archived",
+        "media_info",
         "media_download",
+        "photo_download",
+        "video_download",
+        "clip_download",
+        "album_download",
         "save_media",
+        "media_delete",
     ],
 }

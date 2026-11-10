@@ -13,6 +13,9 @@ from .serialize import plain
 FEATURES = (
     "thread_list",
     "thread_detail",
+    "business_dm_box",
+    "pending_requests",
+    "spam_inbox",
 )
 
 DEFAULT_TEMPLATE = "Thanks for reaching out! I'll get back to you shortly."
@@ -191,11 +194,70 @@ def ig_inbox(
     limit: int = 10,
     suggest: bool = False,
     thread_id: Any = None,
+    box: str | None = None,
+    kind: str | None = None,
 ) -> dict[str, Any]:
     """List threads waiting for a reply, or check a specific thread."""
     try:
         hours = max(int(hours or 48), 1)
         limit = max(int(limit or 10), 1)
+
+        if box is not None and box not in ("general", "primary", "requests", "spam"):
+            return {
+                "ok": False,
+                "error": f"unknown box: {box}; valid: general, primary, requests, spam",
+            }
+        if kind and kind != "groups":
+            return {
+                "ok": False,
+                "error": f"unknown kind: {kind}; valid: groups",
+            }
+
+        if box is not None or kind == "groups":
+            instagram, settings = client.open_client()
+            identity = session.settings_identity(settings or {})
+            own_id = str(identity.get("user_id") or "")
+
+            if box is not None:
+                if box in ("general", "primary"):
+                    threads = client.call_feature(
+                        instagram, "thread_list", amount=limit, box=box
+                    )
+                elif box == "requests":
+                    threads = client.call_feature(
+                        instagram, "pending_requests", amount=limit
+                    )
+                else:
+                    threads = client.call_feature(
+                        instagram, "spam_inbox", amount=limit
+                    )
+            else:
+                threads = client.call_feature(
+                    instagram, "thread_list", amount=max(limit * 3, 20)
+                )
+
+            if not isinstance(threads, list):
+                threads = list(threads or [])
+
+            items: list[dict[str, Any]] = []
+            for thread in threads:
+                if kind == "groups" and not client.field_value(thread, "is_group"):
+                    continue
+                item = _extract_item(thread, own_id, suggest=suggest)
+                if not item:
+                    continue
+                item["is_group"] = bool(client.field_value(thread, "is_group"))
+                item.pop("is_ours", None)
+                items.append(item)
+                if len(items) >= limit:
+                    break
+
+            return {
+                "ok": True,
+                "box": box or None,
+                "kind": kind or None,
+                "items": items,
+            }
 
         instagram, settings = client.open_client()
         identity = session.settings_identity(settings or {})

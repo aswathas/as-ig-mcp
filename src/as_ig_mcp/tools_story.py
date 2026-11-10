@@ -120,9 +120,18 @@ def ig_story(
                 pk_val = int(target_story_id)
             except ValueError:
                 pk_val = target_story_id
-            viewers = client.call_feature(
-                instagram, "story_viewers", story_pk=pk_val
-            )
+            try:
+                viewers = client.call_feature(
+                    instagram, "story_viewers", story_pk=pk_val
+                )
+            except (KeyError, ValueError):
+                return {
+                    "ok": True,
+                    "action": "viewers",
+                    "story_id": target_story_id,
+                    "viewers": [],
+                    "note": "Instagram returned viewer data instagrapi could not parse (or no viewers)",
+                }
             return {
                 "ok": True,
                 "action": "viewers",

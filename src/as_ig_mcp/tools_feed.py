@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from . import client
+from . import client, state
 from .cache import DEFAULT_TTL, Cache, make_key
 from .serialize import plain, plain_list
 
@@ -19,6 +20,9 @@ KINDS = {
     "tray",
     "guides",
     "liked",
+    "notes",
+    "mentions",
+    "download",
 }
 
 MEDIA_KINDS = {"posts", "reels", "tagged"}
@@ -36,6 +40,12 @@ FEATURES = (
     "guides",
     "liked",
     "comments",
+    "notes",
+    "media_info",
+    "photo_download",
+    "video_download",
+    "clip_download",
+    "album_download",
 )
 
 CAPTION_LIMIT = 300
@@ -84,6 +94,43 @@ def _notification_items(result: Any) -> list[Any]:
     return list(result or [])
 
 
+def _download(instagram: Any, media_id: Any) -> list[dict[str, Any]]:
+    """Download one post to the media folder, choosing the method by media type."""
+    if media_id in (None, ""):
+        raise ValueError("media_id is required to download")
+    info = client.call_feature(instagram, "media_info", media_pk=str(media_id))
+    media_type = client.field_value(info, "media_type")
+    product_type = str(client.field_value(info, "product_type") or "").lower()
+    try:
+        numeric_type = int(media_type or 0)
+    except (TypeError, ValueError):
+        numeric_type = 0
+
+    if product_type == "clips":
+        feature = "clip_download"
+    elif numeric_type == 8:
+        feature = "album_download"
+    elif numeric_type == 2:
+        feature = "video_download"
+    else:
+        feature = "photo_download"
+
+    folder = state.media_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    result = client.call_feature(
+        instagram, feature, media_pk=str(media_id), folder=folder
+    )
+    raw_paths = result if isinstance(result, (list, tuple)) else [result]
+    base = folder.resolve()
+    paths: list[str] = []
+    for item in raw_paths:
+        resolved = Path(str(item)).resolve()
+        if base not in resolved.parents and resolved != base:
+            raise ValueError(f"download path {resolved} is outside the media directory")
+        paths.append(str(resolved))
+    return [{"media_id": str(media_id), "media_type": media_type, "paths": paths}]
+
+
 def _attach_comments(instagram: Any, items: list[dict], amount: int = 50) -> None:
     for item in items[:5]:
         pk = item.get("pk")
@@ -124,8 +171,10 @@ def _dispatch(
     cursor: str | None,
     limit: int,
     include: str,
+    media_id: Any = None,
 ) -> dict[str, Any]:
     next_cursor = None
+    extra: dict[str, Any] = {}
 
     if kind in MEDIA_KINDS:
         account = client.resolve_user_id(instagram, username, user_id, settings)
@@ -151,8 +200,30 @@ def _dispatch(
         items = _tray(instagram, settings)[:limit]
     elif kind == "guides":
         account = client.resolve_user_id(instagram, username, user_id, settings)
-        guides = client.call_feature(instagram, "guides", user_id=account)
+        try:
+            guides = client.call_feature(instagram, "guides", user_id=account)
+        except Exception as exc:
+            if "404" in str(exc) or "notfound" in type(exc).__name__.lower():
+                return {
+                    "ok": False,
+                    "kind": "guides",
+                    "error": "Instagram removed the user guides endpoint (404); nothing to read",
+                }
+            raise
         items = plain_list(guides, limit)
+    elif kind == "notes":
+        items = plain_list(client.call_feature(instagram, "notes"), limit)
+    elif kind == "mentions":
+        raw = client.call_feature(instagram, "notifications", mark_as_seen=False) or {}
+        section = raw.get("story_mentions") if isinstance(raw, dict) else None
+        section = section if isinstance(section, dict) else {}
+        reels = list(section.get("reels") or []) + list(
+            section.get("product_stories_reels") or []
+        )
+        items = plain_list(reels, limit)
+        extra["mentions_count"] = section.get("mentions_count_string")
+    elif kind == "download":
+        items = _download(instagram, media_id)
     else:  # liked
         media = client.call_feature(instagram, "liked", amount=limit)
         items = [media_item(item) for item in media or []][:limit]
@@ -161,7 +232,13 @@ def _dispatch(
     if "comments" in wanted and kind in MEDIA_KINDS | {"archive", "liked"}:
         _attach_comments(instagram, items)
 
-    return {"ok": True, "kind": kind, "items": items, "next_cursor": next_cursor}
+    return {
+        "ok": True,
+        "kind": kind,
+        "items": items,
+        "next_cursor": next_cursor,
+        **extra,
+    }
 
 
 def ig_feed(
@@ -171,6 +248,7 @@ def ig_feed(
     cursor: str | None = None,
     limit: int = 12,
     include: str = "",
+    media_id: Any = None,
 ) -> dict[str, Any]:
     """Return one feed kind as a list of plain items."""
     try:
@@ -189,6 +267,7 @@ def ig_feed(
                 "cursor": cursor,
                 "limit": limit,
                 "include": include,
+                "media_id": media_id,
             },
         )
         cached = cache.get(key)
@@ -197,7 +276,7 @@ def ig_feed(
 
         instagram, settings = client.open_client()
         result = _dispatch(
-            instagram, settings, kind, username, user_id, cursor, limit, include
+            instagram, settings, kind, username, user_id, cursor, limit, include, media_id
         )
         cache.set(key, result, ttl=DEFAULT_TTL)
         return result

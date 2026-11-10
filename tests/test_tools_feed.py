@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+
+from instagrapi.exceptions import ClientNotFoundError
 
 from as_ig_mcp import client, session, tools_feed
 
@@ -17,7 +20,12 @@ class FakeClient:
     def __getattr__(self, name: str):
         def handler(**kwargs):
             self.calls.append((name, kwargs))
-            return self.results.get(name, [])
+            value = self.results.get(name, [])
+            if isinstance(value, Exception):
+                raise value
+            if callable(value):
+                return value(**kwargs)
+            return value
 
         return handler
 
@@ -90,13 +98,35 @@ def test_ig_feed_dispatches_each_kind(tmp_path, monkeypatch):
         ),
         ("guides", {"user_guides_v1": [{"id": "g1", "title": "Guide"}]}, "user_guides_v1"),
         ("liked", {"liked_medias": [MEDIA]}, "liked_medias"),
+        ("notes", {"get_notes": [{"id": "n1", "text": "note"}]}, "get_notes"),
+        (
+            "mentions",
+            {
+                "news_inbox_v1": {
+                    "story_mentions": {
+                        "reels": [{"pk": "m1"}],
+                        "mentions_count_string": "1 story mentions you.",
+                    }
+                }
+            },
+            "news_inbox_v1",
+        ),
+        (
+            "download",
+            {
+                "media_info": {"media_type": 1, "product_type": "feed"},
+                "photo_download": lambda folder, **kwargs: Path(folder) / "x.jpg",
+            },
+            "photo_download",
+        ),
     )
 
     for kind, results, method in cases:
         monkeypatch.setenv("APPDATA", str(tmp_path / kind))
         fake = _install(monkeypatch, results)
 
-        result = tools_feed.ig_feed(kind=kind)
+        extra = {"media_id": "9"} if kind == "download" else {}
+        result = tools_feed.ig_feed(kind=kind, **extra)
 
         assert result["ok"] is True, (kind, result)
         assert result["kind"] == kind
@@ -176,6 +206,16 @@ def test_include_comments_only_covers_the_newest_five(tmp_path, monkeypatch):
         assert item["comments"][0]["text"] == "nice"
     assert "comments" not in result["items"][5]
     assert fake.names().count("media_comments") == 5
+
+
+def test_guides_404_returns_a_clear_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    _install(monkeypatch, {"user_guides_v1": ClientNotFoundError("404 Client Error")})
+
+    result = tools_feed.ig_feed(kind="guides")
+
+    assert result["ok"] is False
+    assert "removed" in result["error"]
 
 
 def test_unknown_kind_returns_an_error(tmp_path, monkeypatch):

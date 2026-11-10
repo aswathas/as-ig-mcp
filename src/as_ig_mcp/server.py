@@ -104,8 +104,21 @@ def ig_people(
 @mcp.tool(
     description="[AS-IG-MCP] Search users, hashtags, places, music, posts, DMs or an account handle."
 )
-def ig_search(kind: str = "user", query: str = "", limit: int = 20) -> dict[str, Any]:
-    return _safe(tools_discovery.ig_search, kind=kind, query=query, limit=limit)
+def ig_search(
+    kind: str = "user",
+    query: str = "",
+    limit: int = 20,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> dict[str, Any]:
+    return _safe(
+        tools_discovery.ig_search,
+        kind=kind,
+        query=query,
+        limit=limit,
+        lat=lat,
+        lng=lng,
+    )
 
 
 @mcp.tool(
@@ -118,6 +131,7 @@ def ig_feed(
     cursor: str | None = None,
     limit: int = 12,
     include: str = "",
+    media_id: str | None = None,
 ) -> dict[str, Any]:
     return _safe(
         tools_feed.ig_feed,
@@ -127,6 +141,7 @@ def ig_feed(
         cursor=cursor,
         limit=limit,
         include=include,
+        media_id=media_id,
     )
 
 
@@ -149,6 +164,8 @@ def ig_inbox(
     limit: int = 10,
     suggest: bool = False,
     thread_id: str | None = None,
+    box: str | None = None,
+    kind: str | None = None,
 ) -> dict[str, Any]:
     return _safe(
         tools_inbox.ig_inbox,
@@ -156,6 +173,8 @@ def ig_inbox(
         limit=limit,
         suggest=suggest,
         thread_id=thread_id,
+        box=box,
+        kind=kind,
     )
 
 
