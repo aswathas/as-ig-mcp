@@ -38,7 +38,7 @@ paused it)
 | R15 | Highlights: read and write | `ig_story` reads; `ig_write kind=highlight` writes | todo |
 | R16 | Comments: read, reply, delete, pin, bulk delete, hold, approve | `ig_feed include=comments`; `ig_write kind=comment` | todo |
 | R17 | Insights: media, account, best, compare, demographics | `ig_insight` for each kind | green — all six kinds verified live: media, account, best, best_time, compare, demographics; missing fields come back as null with a note, never a number |
-| R18 | Business DM box | `ig_thread box=general` returns threads | todo |
+| R18 | Business DM box | `ig_thread box=general` returns threads | doing — the health probe reads it live (3 threads); no tool exposes the box yet |
 | R19 | Media download, upload with music, cutout sticker | `ig_feed` and `ig_story` download; `ig_write` publish kinds for upload-with-music and cutout | doing — download is a read, so it belongs to the read tools, not `ig_write` |
 | R20 | Profile edit, category, professional type, AI label | `ig_write kind=profile\|category\|ai_label` | todo |
 | R21 | Close friends, block, mute, report, remove follower | `ig_write` for each kind | todo |
@@ -52,10 +52,10 @@ paused it)
 
 | # | Capability | Check | Status |
 |---|---|---|---|
-| W1 | Approval gate blocks | `ig_write kind=send_message` and the human clicks No → the tool returns `denied` and sends nothing | todo |
-| W2 | One approved write lands once | the human clicks Yes → exactly one message appears in the owner's own thread | todo |
-| W3 | Idempotency | replaying the same idempotency key reports "already done" and sends nothing | todo |
-| W4 | Audit journal | `audit.jsonl` holds the denied attempt, the approved attempt and the target | todo |
+| W1 | Approval gate blocks | `ig_write kind=send_message` and the human clicks No → the tool returns `denied` and sends nothing | doing — verified offline against a fake client (denied, no desktop, approved, replay); the live click is still owed |
+| W2 | One approved write lands once | the human clicks Yes → exactly one message appears in the owner's own thread | doing — verified offline (exactly one call); the live click is still owed |
+| W3 | Idempotency | replaying the same idempotency key reports "already done" and sends nothing | doing — verified offline; the live click is still owed |
+| W4 | Audit journal | `audit.jsonl` holds the denied attempt, the approved attempt and the target | doing — the journal is written and checked offline; the live click is still owed |
 | W5 | Publish photo, video, reel, carousel, story | `ig_write kind=publish` for each target | todo |
 | W6 | Instagram's own scheduler | `ig_write kind=schedule schedule_at=…` is accepted by Instagram | todo |
 | W7 | Local queue and recurrence | `ig_queue` lists, schedules, cancels; recurrence computes | todo |
@@ -69,13 +69,13 @@ paused it)
 |---|---|---|---|
 | P1 | Health probe | `ig_health` reports every class live | green — 10/10 classes live through our own client |
 | P2 | Session status and relogin | `ig_session status`; relogin needs one emailed code | doing — status reports the session source; the login and relogin flows are built but not yet run against Instagram (a live run needs one emailed code) |
-| P3 | No relogin after restart | restart the server, read a thread, no code needed | todo |
-| P4 | Caching | second identical read within 90 s does not hit Instagram | todo |
+| P3 | No relogin after restart | restart the server, read a thread, no code needed | green — the server has been restarted many times during the build and every read worked with no email code |
+| P4 | Caching | second identical read within 90 s does not hit Instagram | doing — the cache is in SQLite with a two-connection test; the live no-second-hit check is not measured yet |
 | P5 | Version pinning | `pyproject.toml` pins `instagrapi==3.2.8` | green — pinned and all 55 method names verified to exist on 3.2.8 |
-| P6 | Presets | `ig_preset` stores and returns a caption and hashtag set | todo |
-| P7 | Plugin manifest valid | `claude plugin validate --strict` prints validation passed | todo |
-| P8 | PyPI build | the package builds and installs from the built artifact | todo |
-| P9 | Registry manifest valid | `server.json` validates against the registry schema | todo |
+| P6 | Presets | `ig_preset` stores and returns a caption and hashtag set | doing — built and unit tested; not yet exercised through the tool |
+| P7 | Plugin manifest valid | `claude plugin validate --strict` prints validation passed | green — verified: `✔ Validation passed` |
+| P8 | PyPI build | the package builds and installs from the built artifact | doing — the wheel and sdist build and contain the package; installing from the artifact is not tested yet |
+| P9 | Registry manifest valid | `server.json` validates against the registry schema | green — checked against the registry schema in the packaging tests |
 
 ## Parked by user, 2026-11-10
 
