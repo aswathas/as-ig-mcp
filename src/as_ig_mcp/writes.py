@@ -19,6 +19,7 @@ from .serialize import plain
 TITLE = "AS-IG-MCP - approve write"
 BODY_HINT = "Yes = approve and do it now. No = do not do it."
 DEFAULT_APPROVE_TIMEOUT = 300
+AUTO_APPROVE_ENV = "AS_IG_AUTO_APPROVE"
 
 MB_YESNO = 0x00000004
 MB_SETFOREGROUND = 0x00010000
@@ -247,6 +248,12 @@ def _approve_timeout(timeout_s: float = DEFAULT_APPROVE_TIMEOUT) -> float:
         return float(DEFAULT_APPROVE_TIMEOUT)
 
 
+def auto_approve() -> bool:
+    """True only when the operator opts in for this process."""
+    raw = os.environ.get(AUTO_APPROVE_ENV, "")
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _close_thread_windows(thread_id: int) -> None:
     try:
         import ctypes
@@ -328,6 +335,7 @@ def _journal(
     state_name: str,
     idempotency_key: str | None,
     result_summary: str,
+    approved_by: str = "human",
 ) -> None:
     audit.append_entry(
         {
@@ -336,6 +344,7 @@ def _journal(
             "args_summary": make_args_summary(feature, args),
             "preview": preview,
             "state": state_name,
+            "approved_by": approved_by,
             "idempotency_key": _redact(idempotency_key) if idempotency_key else None,
             "result_summary": _redact(_one_line(result_summary, 200)),
         }
@@ -360,6 +369,9 @@ def perform_write(
     With ``execute=False`` the write is approved exactly as usual and journalled,
     but the Instagram call is left to the queue runner. The approval travels
     with the item; the runner publishes an already-approved post.
+
+    Set ``AS_IG_AUTO_APPROVE=1`` to skip the dialog for this process. The journal
+    records ``approved_by: auto`` so the bypass is always visible afterwards.
     """
     values = dict(args or {})
     if feature not in mapping.FEATURE_METHODS:
@@ -373,7 +385,9 @@ def perform_write(
     if dialog is None or dialog is _INITIAL_SHOW_APPROVAL:
         dialog = show_approval
 
-    decision = dialog(preview)
+    auto = auto_approve()
+    decision = True if auto else dialog(preview)
+    approved_by = "auto" if auto else "human"
 
     if decision is None:
         _journal(feature, values, preview, "failed", idempotency_key, "no interactive desktop")
@@ -384,20 +398,28 @@ def perform_write(
         return {"ok": False, "denied": True, "preview": preview}
 
     if not execute:
-        _journal(feature, values, preview, "approved", idempotency_key, DEFERRED)
+        _journal(
+            feature, values, preview, "approved", idempotency_key, DEFERRED, approved_by
+        )
         return {"ok": True, "approved": True, "preview": preview}
 
-    _journal(feature, values, preview, "approved", idempotency_key, audit.EXECUTING)
+    _journal(
+        feature, values, preview, "approved", idempotency_key, audit.EXECUTING, approved_by
+    )
     try:
         instagram, _settings = client.open_client()
         result = client.call_write(instagram, feature, **values)
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
-        _journal(feature, values, preview, "failed", idempotency_key, message)
+        _journal(
+            feature, values, preview, "failed", idempotency_key, message, approved_by
+        )
         return {"ok": False, "error": message, "preview": preview}
 
     # Writes clear the cache so no stale cached read is left behind
     cache.Cache().invalidate()
 
-    _journal(feature, values, preview, "approved", idempotency_key, audit.COMPLETED)
+    _journal(
+        feature, values, preview, "approved", idempotency_key, audit.COMPLETED, approved_by
+    )
     return {"ok": True, "preview": preview, "result": plain(result)}

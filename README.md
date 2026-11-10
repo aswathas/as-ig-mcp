@@ -74,6 +74,10 @@ silence, and nothing happens. There is no approval code anywhere, so there is
 nothing for an agent to relay or fetch. On a machine with no interactive
 desktop, writes are refused rather than approved by the agent.
 
+`AS_IG_AUTO_APPROVE=1` is an explicit opt-out for scripted runs. It is off
+unless you set it, and the journal records `approved_by: auto` on every write
+it approves, so a bypass is always visible afterwards.
+
 ## Configuration
 
 | Variable | Meaning | Default |
@@ -82,6 +86,7 @@ desktop, writes are refused rather than approved by the agent.
 | `IG_PLACES_LAT`, `IG_PLACES_LNG` | coordinates for place search | unset |
 | `AS_IG_REALTIME` | `0` turns the realtime socket off | on |
 | `AS_IG_APPROVE_TIMEOUT` | seconds the approval dialog waits | 300 |
+| `AS_IG_AUTO_APPROVE` | `1` skips the dialog for this process; journalled as `approved_by: auto` | unset |
 | `AS_IG_CACHE_TTL` | read cache seconds | 90 |
 
 ## Data and privacy

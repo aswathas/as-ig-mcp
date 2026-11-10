@@ -178,6 +178,49 @@ def test_the_journal_never_contains_a_cookie_or_a_csrf_token(appdata, monkeypatc
     assert "csrftoken" not in journal
 
 
+def test_auto_approve_env_skips_the_dialog_and_journals_auto(appdata, monkeypatch):
+    fake = FakeClient()
+    _use(monkeypatch, fake)
+    monkeypatch.setenv("AS_IG_AUTO_APPROVE", "1")
+
+    def dialog(preview):
+        raise AssertionError("the dialog must not be shown when auto-approve is on")
+
+    result = writes.perform_write(
+        "send_message",
+        {"user_ids": ["123"], "text": "hello"},
+        dialog=dialog,
+    )
+
+    assert result["ok"] is True
+    assert fake.calls == [{"user_ids": ["123"], "text": "hello"}]
+    approved = [entry for entry in audit.read_entries() if entry["state"] == "approved"]
+    assert approved
+    assert all(entry["approved_by"] == "auto" for entry in approved)
+
+
+def test_the_dialog_still_runs_when_auto_approve_is_off(appdata, monkeypatch):
+    fake = FakeClient()
+    _use(monkeypatch, fake)
+    monkeypatch.delenv("AS_IG_AUTO_APPROVE", raising=False)
+    seen: list[str] = []
+
+    def dialog(preview):
+        seen.append(preview)
+        return False
+
+    result = writes.perform_write(
+        "send_message",
+        {"user_ids": ["123"], "text": "hello"},
+        dialog=dialog,
+    )
+
+    assert result["denied"] is True
+    assert len(seen) == 1
+    denied = [entry for entry in audit.read_entries() if entry["state"] == "denied"]
+    assert denied[0]["approved_by"] == "human"
+
+
 def test_successful_write_clears_the_cache(appdata, monkeypatch):
     fake = FakeClient()
     _use(monkeypatch, fake)

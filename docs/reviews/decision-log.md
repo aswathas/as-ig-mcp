@@ -218,3 +218,12 @@ checklist holds the state. This file holds the reasoning.
 - Chosen: keep the 16 tools and add no code-execution sandbox. If a repeated read-heavy task appears, build composite read tools (`ig_inbox_digest`, `ig_thread_digest`) first; a restricted chain tool only if filters vary every time.
 - Evidence: `docs/study/code-mode-evaluation.md`; Cloudflare docs and blog, olxcars README.
 - Consequence: no new runtime or JS layer; writes stay behind the desktop gate; revisit only on a named repeated task, a second server sharing the runner, or multi-user hosting.
+
+## D25 — A dialog bypass exists, but only as an explicit opt-in
+
+- Date: 2026-11-10
+- Context: the owner asked to skip the desktop Yes/No box for agent-driven runs.
+- Options: delete the gate; approve by default; an environment opt-in; keep the gate only.
+- Chosen: `AS_IG_AUTO_APPROVE=1` skips the dialog for that process. Unset is the default. The journal writes `approved_by: auto` so an auto-approved write is distinguishable from a click.
+- Evidence: `tests/test_writes.py` — auto path never calls the dialog; unset path still calls it and journals `approved_by: human`; 194 tests pass.
+- Consequence: any process started with the variable set can write without a click. Removing the variable restores the gate; no code change needed.
