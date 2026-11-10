@@ -209,3 +209,12 @@ checklist holds the state. This file holds the reasoning.
 - Chosen: two structured files, no mass dump; the `aswath-commit` skill defines the format.
 - Evidence: this file and `change-inventory.md`.
 - Consequence: future changes append entries D24+ and add one inventory row per file.
+
+## D24 — Code Mode is not adopted
+
+- Date: 2026-11-10
+- Context: Cloudflare's Code Mode (one code-execution tool plus an isolated sandbox, with pause/approve/replay) and OLX's in-process variant were evaluated for `as-ig-mcp`.
+- Options: Cloudflare runtime; in-process free-form Python; restricted chain tool; composite read tools; keep the 16-tool surface.
+- Chosen: keep the 16 tools and add no code-execution sandbox. If a repeated read-heavy task appears, build composite read tools (`ig_inbox_digest`, `ig_thread_digest`) first; a restricted chain tool only if filters vary every time.
+- Evidence: `docs/study/code-mode-evaluation.md`; Cloudflare docs and blog, olxcars README.
+- Consequence: no new runtime or JS layer; writes stay behind the desktop gate; revisit only on a named repeated task, a second server sharing the runner, or multi-user hosting.

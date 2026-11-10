@@ -24,8 +24,9 @@ tested. The decision log explains the choices; the build log explains the order.
 | `README.md` | Status text reflects live gate and write execution; docs pointers added | The old status said live writes were still scheduled | Docs only |
 | `docs/reviews/build-log.md` | Chronology: live write sweep, six gaps, blocked reasons, realtime proof, challenge note | Record what was run and what broke | Docs only |
 | `docs/reviews/capability-checklist.md` | 36 green, 9 held as `todo — held`; per-row evidence | The definition of done must match reality | Docs only |
-| `docs/reviews/decision-log.md` | New: D1–D23, every real choice with alternatives and evidence | The reasoning was scattered or unwritten | Docs only |
+| `docs/reviews/decision-log.md` | D1–D24; D24 records the Code Mode decision | The reasoning was scattered or unwritten | Docs only |
 | `docs/reviews/change-inventory.md` | New: this file | One place to see every file and its test | Docs only |
+| `docs/study/code-mode-evaluation.md` | New: Code Mode evaluation (Cloudflare vs OLX, fit, options, decision, revisit triggers) | Record the reasoning behind D24 | Docs only |
 
 ## Outside the repo
 
